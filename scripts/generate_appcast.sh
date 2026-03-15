@@ -151,8 +151,11 @@ for notes_path in "$ARCHIVES_DIR"/*.md "$ARCHIVES_DIR"/*.txt "$ARCHIVES_DIR"/*.h
 done
 
 TMP_APPCAST="$TMP_DIR/appcast.xml"
+TMP_PRIVATE_KEY="$TMP_DIR/private_ed25519.key"
+"$GENERATE_KEYS_TOOL" --account "$ACCOUNT" -x "$TMP_PRIVATE_KEY"
 "$GENERATE_APPCAST_TOOL" \
     --account "$ACCOUNT" \
+    --ed-key-file "$TMP_PRIVATE_KEY" \
     --embed-release-notes \
     --link "https://github.com/$REPO" \
     -o "$TMP_APPCAST" \
@@ -250,4 +253,3 @@ tree.write(output_path, encoding="utf-8", xml_declaration=True)
 PY
 
 echo "appcast written to $OUTPUT_PATH"
-
