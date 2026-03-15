@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>ProfileSmith</title>
+        <item>
+            <title>1.0</title>
+            <pubDate>Mon, 16 Mar 2026 02:55:19 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.0</link>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.0
+
+- Built a new macOS provisioning profile manager from the ground up in Swift.
+- Indexed profiles with SQLite + GRDB for fast search, filtering, and sorting at scale.
+- Added archive and bundle inspection for apps, IPAs, XCArchives, and extensions.
+- Included Quick Look integration, drag and drop import, safe export, and filename beautification.
+- Added a status bar menu and Sparkle-based update support.
+- Covered parser, database, scanner, file operations, and UI controller behavior with automated tests.
+
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.0/ProfileSmith_V_1.0.dmg" length="8565985" type="application/octet-stream" sparkle:edSignature="zG8IXVjMOC7ZHHnh4eVuy7q0VirnXkwoyJPSR7T7UD4KheRAuCEVVL/WTou8BEfIiPS3QfK3qDQUYtYME84+DA==" />
+        </item>
+        <link>https://github.com/wangwanjie/ProfileSmith</link>
+        <description>ProfileSmith release feed.</description>
+        <language>zh-CN</language>
+    </channel>
+</rss>
