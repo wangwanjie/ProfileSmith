@@ -199,6 +199,8 @@ struct MainViewControllerTests {
         let controller = MainViewController(context: context)
         controller.loadViewIfNeeded()
 
+        #expect(controller.debugSplitView.arrangedSubviews.count == 2)
+        #expect(controller.debugSplitView.arrangedSubviews.allSatisfy { $0.translatesAutoresizingMaskIntoConstraints == false })
         #expect(controller.debugTableView.columnAutoresizingStyle == .noColumnAutoresizing)
         #expect(controller.debugTableView.tableColumns.count >= 3)
         #expect(controller.debugTableView.tableColumns[0].resizingMask.contains(.userResizingMask))
@@ -249,6 +251,54 @@ struct MainViewControllerTests {
             }
         ) {
             controller.debugProgressIndicator.isHidden
+        }
+    }
+
+    @MainActor
+    @Test
+    func repositoryRefreshPublisherStopsProgressIndicatorAfterControllerBinds() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let controller = MainViewController(context: context)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.loadViewIfNeeded()
+        window.makeKeyAndOrderFront(nil)
+
+        context.repository.debugSetRefreshState(true)
+        try waitUntil(
+            description: "repository publisher showed refresh indicator after controller binding",
+            debugState: {
+                "refreshing=\(context.repository.isRefreshing) hidden=\(controller.debugProgressIndicator.isHidden)"
+            }
+        ) {
+            context.repository.isRefreshing && controller.debugProgressIndicator.isHidden == false
+        }
+
+        context.repository.debugSetRefreshState(false)
+        try waitUntil(
+            description: "repository publisher hid refresh indicator after controller binding",
+            debugState: {
+                "refreshing=\(context.repository.isRefreshing) hidden=\(controller.debugProgressIndicator.isHidden)"
+            }
+        ) {
+            context.repository.isRefreshing == false && controller.debugProgressIndicator.isHidden
         }
     }
 

@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let mainWindowController = MainWindowController(context: context)
             self.mainWindowController = mainWindowController
+            // Ensure repository observers are attached before the first launch refresh starts.
+            _ = mainWindowController.contentController.view
             preferencesWindowController = PreferencesWindowController(updateManager: context.updateManager)
 
             if !isUITesting {

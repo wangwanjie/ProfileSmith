@@ -88,6 +88,11 @@ xcodebuild test \
 4. 发布 GitHub Release
 5. 生成并提交 `appcast.xml`
 
+## 1.2.2 更新
+
+- 修复右侧详情 pane 在启动阶段可能触发的 Auto Layout 冲突日志
+- 修复 split view 稳定逻辑在布局过程中重复触发布局，消除控制台递归布局警告
+
 ## 1.2.1 更新
 
 - Finder Quick Look 预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView

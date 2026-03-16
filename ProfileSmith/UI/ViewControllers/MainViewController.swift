@@ -222,6 +222,7 @@ final class MainViewController: NSViewController {
         buildDetailArea()
 
         tableContainer.addSubview(tableScrollView)
+        tableContainer.translatesAutoresizingMaskIntoConstraints = false
         tableContainer.setAccessibilityIdentifier("main.tablePane")
         tableContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         tableContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -230,6 +231,7 @@ final class MainViewController: NSViewController {
         }
 
         buildDetailContainer()
+        detailContainer.translatesAutoresizingMaskIntoConstraints = false
         detailContainer.setAccessibilityIdentifier("main.detailPane")
         detailContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         detailContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -493,21 +495,31 @@ final class MainViewController: NSViewController {
 
     private func bindRepository() {
         context.repository.$snapshot
-            .receive(on: RunLoop.main)
             .sink { [weak self] snapshot in
-                self?.applySnapshot(snapshot)
+                self?.performRepositoryUIUpdate {
+                    self?.applySnapshot(snapshot)
+                }
             }
             .store(in: &cancellables)
 
         context.repository.$isRefreshing
-            .receive(on: RunLoop.main)
             .sink { [weak self] isRefreshing in
-                guard let self else { return }
-                self.applyRepositoryRefreshState(isRefreshing, snapshot: self.context.repository.snapshot)
+                self?.performRepositoryUIUpdate {
+                    guard let self else { return }
+                    self.applyRepositoryRefreshState(isRefreshing, snapshot: self.context.repository.snapshot)
+                }
             }
             .store(in: &cancellables)
 
         syncRepositoryRefreshState(snapshot: context.repository.snapshot)
+    }
+
+    private func performRepositoryUIUpdate(_ update: @escaping () -> Void) {
+        if Thread.isMainThread {
+            update()
+        } else {
+            DispatchQueue.main.async(execute: update)
+        }
     }
 
     private func applySnapshot(_ snapshot: RepositorySnapshot) {
@@ -889,7 +901,6 @@ final class MainViewController: NSViewController {
 
         isApplyingPreferredSplitPosition = true
         splitView.setPosition(clampedPosition, ofDividerAt: 0)
-        splitView.layoutSubtreeIfNeeded()
         isApplyingPreferredSplitPosition = false
     }
 
