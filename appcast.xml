@@ -4,7 +4,7 @@
         <title>ProfileSmith</title>
         <item>
             <title>1.2.1</title>
-            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.2.1</link>
             <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
@@ -14,6 +14,7 @@
 - Finder Quick Look 预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView。
 - 原生 Quick Look 预览改为纵向信息布局，暗色主题下与主应用保持一致。
 - README 新增最新界面截图，补充当前版本展示效果。
+- 修复应用冷启动后右上角刷新指示器可能持续转动、需要手动点击“刷新”才会消失的问题。
 </description>
             <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.2.1/ProfileSmith_V_1.2.1.dmg" length="8901767" type="application/octet-stream" sparkle:edSignature="bj+Ev+qRuyxzYWAF5jwBWqe9iutXqfdumLHucQzgci5LLW+2C6AFuXgABdiqZcGHLiauXwtrEIlv2jDqyV5vDA==" />
             <sparkle:deltas>
@@ -23,7 +24,7 @@
         </item>
         <item>
             <title>1.1</title>
-            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.1</link>
             <sparkle:version>3</sparkle:version>
             <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
@@ -40,7 +41,7 @@
         </item>
         <item>
             <title>1.0</title>
-            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.0</link>
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
