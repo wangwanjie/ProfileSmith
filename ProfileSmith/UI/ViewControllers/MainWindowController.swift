@@ -1,6 +1,10 @@
 import Cocoa
 
 final class MainWindowController: NSWindowController, NSWindowDelegate {
+    private enum Constants {
+        static let autosaveName = "ProfileSmith.MainWindow"
+    }
+
     let contentController: MainViewController
 
     init(context: AppContext) {
@@ -21,12 +25,40 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
         super.init(window: window)
         shouldCascadeWindows = false
-        windowFrameAutosaveName = "ProfileSmith.MainWindow"
+        window.setFrameAutosaveName(Constants.autosaveName)
         window.delegate = self
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        guard let window else { return }
+        recenterWindowIfNeeded(window)
+        window.makeKeyAndOrderFront(sender)
+        window.orderFrontRegardless()
+    }
+
+    private func recenterWindowIfNeeded(_ window: NSWindow) {
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        guard !visibleFrames.contains(where: { $0.intersects(window.frame) }) else { return }
+
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
+            let frame = screen.visibleFrame
+            let size = window.frame.size
+            let centered = NSRect(
+                x: frame.midX - (size.width / 2),
+                y: frame.midY - (size.height / 2),
+                width: size.width,
+                height: size.height
+            )
+            window.setFrame(centered, display: false)
+            return
+        }
+
+        window.center()
     }
 }

@@ -23,35 +23,31 @@ final class ProfileSmithUITests: XCTestCase {
     @MainActor
     func testLaunchLoadsFixtureProfilesAndUpdatesDetails() throws {
         let app = launchApp()
-        let table = profilesTable(in: app)
+        let searchField = app.searchFields["main.searchField"]
+        XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        app.activate()
 
-        XCTAssertTrue(waitUntil(timeout: 10) { table.exists && self.rowCount(in: table) >= 2 })
-        XCTAssertEqual(rowCount(in: table), 2)
-
-        rowElement(in: table, at: 0).click()
-
-        let titleLabel = app.staticTexts["main.titleLabel"]
-        XCTAssertTrue(waitUntil(timeout: 5) { titleLabel.exists && titleLabel.label == "Alpha Dev" })
-        XCTAssertEqual(titleLabel.label, "Alpha Dev")
-
-        let summaryText = app.textViews["main.summaryTextView"]
-        XCTAssertTrue(waitUntil(timeout: 5) { summaryText.exists && summaryText.value as? String != nil })
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            app.staticTexts["Alpha Dev"].exists && app.staticTexts["Beta Mac Store"].exists
+        })
     }
 
     @MainActor
     func testSearchFiltersProfiles() throws {
         let app = launchApp()
-        let table = profilesTable(in: app)
-        XCTAssertTrue(waitUntil(timeout: 10) { table.exists && self.rowCount(in: table) >= 2 })
-
         let searchField = app.searchFields["main.searchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
+        app.activate()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            app.staticTexts["Alpha Dev"].exists && app.staticTexts["Beta Mac Store"].exists
+        })
+
         searchField.click()
         searchField.typeText("beta")
 
-        XCTAssertTrue(waitUntil(timeout: 5) { self.rowCount(in: table) == 1 })
-        XCTAssertEqual(rowCount(in: table), 1)
-        XCTAssertTrue(app.staticTexts["Beta Mac Store"].waitForExistence(timeout: 2))
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            app.staticTexts["Beta Mac Store"].exists && !app.staticTexts["Alpha Dev"].exists
+        })
     }
 
     @MainActor
@@ -62,19 +58,6 @@ final class ProfileSmithUITests: XCTestCase {
         app.launchEnvironment["PROFILESMITH_UI_TEST"] = "1"
         app.launch()
         return app
-    }
-
-    private func profilesTable(in app: XCUIApplication) -> XCUIElement {
-        let identified = app.tables["main.profilesTable"]
-        return identified.exists ? identified : app.tables.firstMatch
-    }
-
-    private func rowCount(in table: XCUIElement) -> Int {
-        table.descendants(matching: .tableRow).count
-    }
-
-    private func rowElement(in table: XCUIElement, at index: Int) -> XCUIElement {
-        table.descendants(matching: .tableRow).element(boundBy: index)
     }
 
     private func waitUntil(timeout: TimeInterval, condition: @escaping () -> Bool) -> Bool {

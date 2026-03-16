@@ -110,6 +110,7 @@
 			buildPhases = (
 				95AE16C42F67164700543FCE /* Sources */,
 				95AE16C52F67164700543FCE /* Frameworks */,
+				A1B2C3DE2F6A000000543FCE /* Build Quick Look Plugin */,
 				95AE16C62F67164700543FCE /* Resources */,
 			);
 			buildRules = (
@@ -247,6 +248,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A1B2C3DE2F6A000000543FCE /* Build Quick Look Plugin */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Build Quick Look Plugin";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$PROJECT_DIR/scripts/build_quicklook_plugin.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		95AE16C42F67164700543FCE /* Sources */ = {
@@ -419,6 +438,7 @@
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ProfileSmith-Info.plist";
@@ -451,6 +471,7 @@
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "ProfileSmith-Info.plist";

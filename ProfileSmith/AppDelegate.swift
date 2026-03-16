@@ -1,14 +1,15 @@
 import Cocoa
 
-@main
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var context: AppContext?
     private var mainWindowController: MainWindowController?
     private var statusItemController: StatusItemController?
+    private var hasPresentedInitialWindow = false
     private let environment = ProcessInfo.processInfo.environment
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
+            NSApp.setActivationPolicy(.regular)
             let context = try AppContext()
             self.context = context
 
@@ -16,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let mainWindowController = MainWindowController(context: context)
             self.mainWindowController = mainWindowController
-            mainWindowController.showWindow(nil)
 
             if !isUITesting {
                 let statusItemController = StatusItemController(
@@ -34,9 +34,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context.updateManager.configure()
                 context.updateManager.scheduleBackgroundUpdateCheck()
             }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.presentInitialMainWindowIfNeeded()
+            }
         } catch {
             presentFatalError(error)
         }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        presentInitialMainWindowIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -70,10 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openMainWindow(_ sender: Any?) {
+        hasPresentedInitialWindow = true
         guard let mainWindowController else { return }
-        mainWindowController.showWindow(sender)
-        mainWindowController.window?.makeKeyAndOrderFront(sender)
-        NSApp.activate(ignoringOtherApps: true)
+        present(mainWindowController: mainWindowController, sender: sender)
     }
 
     @objc private func refreshProfiles(_ sender: Any?) {
@@ -100,7 +107,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         environment["PROFILESMITH_UI_TEST"] == "1"
     }
 
+    private func presentInitialMainWindowIfNeeded() {
+        guard !hasPresentedInitialWindow else { return }
+        guard let mainWindowController else { return }
+
+        hasPresentedInitialWindow = true
+        present(mainWindowController: mainWindowController, sender: nil)
+    }
+
+    private func present(mainWindowController: MainWindowController, sender: Any?) {
+        mainWindowController.showWindow(sender)
+        mainWindowController.window?.deminiaturize(sender)
+        mainWindowController.window?.setIsVisible(true)
+        mainWindowController.window?.makeMain()
+        mainWindowController.window?.makeKey()
+        mainWindowController.window?.makeKeyAndOrderFront(sender)
+        mainWindowController.window?.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func presentFatalError(_ error: Error) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert(error: error)
         alert.messageText = "ProfileSmith 启动失败"
         alert.informativeText = error.localizedDescription
@@ -124,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateItem.target = self
         appMenu.addItem(updateItem)
         appMenu.addItem(NSMenuItem.separator())
-        let pluginItem = NSMenuItem(title: "Quick Look 插件…", action: #selector(openQuickLookPluginManager(_:)), keyEquivalent: "")
+        let pluginItem = NSMenuItem(title: "Finder Quick Look…", action: #selector(openQuickLookPluginManager(_:)), keyEquivalent: "")
         pluginItem.target = self
         appMenu.addItem(pluginItem)
         appMenu.addItem(NSMenuItem.separator())

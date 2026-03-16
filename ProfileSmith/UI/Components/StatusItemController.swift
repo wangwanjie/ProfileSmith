@@ -59,9 +59,10 @@ final class StatusItemController {
         refreshItem.target = self
         menu.addItem(refreshItem)
 
-        let quickLookTitle = quickLookPluginManager.isInstalled ? "卸载 Finder Quick Look 插件" : "安装 Finder Quick Look 插件"
+        let quickLookTitle = quickLookPluginManager.buttonTitle
         let quickLookItem = NSMenuItem(title: quickLookTitle, action: #selector(toggleQuickLookPlugin), keyEquivalent: "")
         quickLookItem.target = self
+        quickLookItem.isEnabled = quickLookPluginManager.isAvailable
         menu.addItem(quickLookItem)
 
         let updateItem = NSMenuItem(title: "检查更新…", action: #selector(checkForUpdates), keyEquivalent: "")
@@ -87,11 +88,7 @@ final class StatusItemController {
 
     @objc private func toggleQuickLookPlugin() {
         do {
-            if quickLookPluginManager.isInstalled {
-                try quickLookPluginManager.uninstallPlugin()
-            } else {
-                try quickLookPluginManager.installBundledPlugin()
-            }
+            try quickLookPluginManager.refreshRegistration()
             rebuildMenu(with: repository.snapshot)
         } catch {
             NSApp.presentError(error)

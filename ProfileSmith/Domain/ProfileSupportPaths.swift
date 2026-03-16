@@ -17,9 +17,9 @@ struct ProfileSupportPaths {
     let renameBackupDirectory: URL
     let applicationSupportDirectory: URL
     let databaseURL: URL
-    let quickLookDirectory: URL
-    let quickLookInstalledBundleURL: URL
-    let bundledQuickLookArchiveURL: URL?
+    let embeddedQuickLookPlugInsDirectory: URL
+    let embeddedQuickLookPreviewExtensionURL: URL
+    let embeddedQuickLookThumbnailExtensionURL: URL
 
     init(bundle: Bundle = .main, environment: [String: String]) throws {
         let homeDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
@@ -70,11 +70,14 @@ struct ProfileSupportPaths {
         self.applicationSupportDirectory = applicationSupportDirectory
         databaseURL = applicationSupportDirectory.appendingPathComponent("ProfileSmith.sqlite", isDirectory: false)
 
-        quickLookDirectory = homeDirectory
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("QuickLook", isDirectory: true)
-        quickLookInstalledBundleURL = quickLookDirectory.appendingPathComponent("ProvisionQL.qlgenerator", isDirectory: true)
-        bundledQuickLookArchiveURL = bundle.url(forResource: "ProvisionQL", withExtension: "qlgenerator.zip")
+        embeddedQuickLookPlugInsDirectory = bundle.builtInPlugInsURL
+            ?? bundle.bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("PlugIns", isDirectory: true)
+        embeddedQuickLookPreviewExtensionURL = embeddedQuickLookPlugInsDirectory
+            .appendingPathComponent("ProfileSmithQuickLookPreview.appex", isDirectory: true)
+        embeddedQuickLookThumbnailExtensionURL = embeddedQuickLookPlugInsDirectory
+            .appendingPathComponent("ProfileSmithQuickLookThumbnail.appex", isDirectory: true)
 
         try ensureDirectoriesExist()
     }
@@ -85,12 +88,8 @@ struct ProfileSupportPaths {
 
     private func ensureDirectoriesExist() throws {
         let fileManager = FileManager.default
-        for location in scanLocations {
-            try fileManager.createDirectory(at: location.url, withIntermediateDirectories: true)
-        }
         try fileManager.createDirectory(at: renameBackupDirectory, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: quickLookDirectory, withIntermediateDirectories: true)
     }
 }
 

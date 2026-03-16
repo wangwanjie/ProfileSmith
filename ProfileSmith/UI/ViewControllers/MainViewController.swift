@@ -105,21 +105,17 @@ final class MainViewController: NSViewController {
 
     func presentQuickLookPluginPanel(_ sender: Any?) {
         let alert = NSAlert()
-        let installed = context.quickLookPluginManager.isInstalled
-        alert.messageText = installed ? "Finder Quick Look 插件已安装" : "安装 Finder Quick Look 插件"
-        alert.informativeText = installed
-            ? "插件已安装到 `~/Library/QuickLook/ProvisionQL.qlgenerator`。现在可以在 Finder 中对 `.ipa`、`.xcarchive`、`.appex`、`.mobileprovision` 和 `.provisionprofile` 文件按空格快速预览。"
-            : "安装后，可以在 Finder 中直接对 `.ipa`、`.xcarchive`、`.appex`、`.mobileprovision` 和 `.provisionprofile` 文件按空格快速预览。"
-        alert.addButton(withTitle: installed ? "卸载" : "安装")
+        let manager = context.quickLookPluginManager
+        alert.messageText = manager.stateDescription
+        alert.informativeText = manager.isAvailable
+            ? "ProfileSmith 已内建 Finder Quick Look 扩展。点击“\(manager.buttonTitle)”后，Finder 就可以对 `.ipa`、`.xcarchive`、`.app`、`.appex`、`.mobileprovision` 和 `.provisionprofile` 文件按空格快速预览。"
+            : "当前构建中未找到 Finder Quick Look 扩展，请先重新构建应用。"
+        alert.addButton(withTitle: manager.buttonTitle)
         alert.addButton(withTitle: "取消")
         if alert.runModal() != .alertFirstButtonReturn { return }
 
         do {
-            if installed {
-                try context.quickLookPluginManager.uninstallPlugin()
-            } else {
-                try context.quickLookPluginManager.installBundledPlugin()
-            }
+            try manager.refreshRegistration()
             updatePluginButtonTitle()
         } catch {
             NSApp.presentError(error)
@@ -533,7 +529,7 @@ final class MainViewController: NSViewController {
         1. 左侧列表展示 `~/Library/MobileDevice/Provisioning Profiles` 和 `~/Library/Developer/Xcode/UserData/Provisioning Profiles` 中的描述文件。
         2. 支持全文搜索、批量选中、Finder 定位、导出、移到废纸篓、彻底删除和文件名美化。
         3. 可以直接拖入 `.mobileprovision` / `.provisionprofile` 安装，也可以拖入 `.ipa` / `.xcarchive` / `.appex` / `.app` 做描述文件与 Info.plist 预览。
-        4. 在 Finder 中需要空格预览时，可点击顶部 `Finder Quick Look` 按钮安装插件。
+        4. Finder Quick Look 已随应用内建；若 Finder 尚未识别，可点击顶部 `Finder Quick Look` 按钮刷新注册。
         """
         previewWebView.loadHTMLString(
             "<html><body style='font-family:-apple-system;padding:32px;background:#f4f7fb;'><h1>ProfileSmith</h1><p>选择一个描述文件，或直接把文件拖进窗口。</p></body></html>",
@@ -687,7 +683,9 @@ final class MainViewController: NSViewController {
     }
 
     private func updatePluginButtonTitle() {
-        pluginButton.title = context.quickLookPluginManager.isInstalled ? "卸载 Finder Quick Look" : "安装 Finder Quick Look"
+        let manager = context.quickLookPluginManager
+        pluginButton.title = manager.buttonTitle
+        pluginButton.isEnabled = manager.isAvailable
     }
 
     private func sanitizeFileName(_ input: String) -> String {
