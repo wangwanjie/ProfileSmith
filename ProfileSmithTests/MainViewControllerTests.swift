@@ -214,6 +214,46 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
+    func coldLaunchViewAppearanceResyncsStaleRefreshIndicatorWithoutManualRefresh() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+        context.repository.debugSetRefreshState(false)
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplyRepositoryRefreshState(true)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+
+        try waitUntil(
+            description: "view appearance resynced stale refresh indicator",
+            debugState: {
+                "refreshing=\(context.repository.isRefreshing) hidden=\(controller.debugProgressIndicator.isHidden)"
+            }
+        ) {
+            controller.debugProgressIndicator.isHidden
+        }
+    }
+
+    @MainActor
+    @Test
     func previewWindowControllerLoadsProfileAndInfoTabs() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }

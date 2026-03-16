@@ -140,3 +140,15 @@ final class ProfileRepository {
         refresh(forceReindex: forceReindex)
     }
 }
+
+#if DEBUG
+extension ProfileRepository {
+    @MainActor
+    func debugSetRefreshState(_ isRefreshing: Bool, snapshot: RepositorySnapshot? = nil) {
+        if let snapshot {
+            self.snapshot = snapshot
+        }
+        self.isRefreshing = isRefreshing
+    }
+}
+#endif

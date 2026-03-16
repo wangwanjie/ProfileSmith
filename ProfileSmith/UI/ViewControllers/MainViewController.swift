@@ -106,6 +106,7 @@ final class MainViewController: NSViewController {
         if ProcessInfo.processInfo.environment["PROFILESMITH_UI_TEST"] == "1" {
             view.window?.makeFirstResponder(searchField)
         }
+        syncRepositoryRefreshState(snapshot: context.repository.snapshot)
         stabilizeSplitViewLayout()
     }
 
@@ -505,6 +506,8 @@ final class MainViewController: NSViewController {
                 self.applyRepositoryRefreshState(isRefreshing, snapshot: self.context.repository.snapshot)
             }
             .store(in: &cancellables)
+
+        syncRepositoryRefreshState(snapshot: context.repository.snapshot)
     }
 
     private func applySnapshot(_ snapshot: RepositorySnapshot) {
