@@ -3,20 +3,59 @@
     <channel>
         <title>ProfileSmith</title>
         <item>
-            <title>1.2</title>
-            <pubDate>Mon, 16 Mar 2026 16:15:47 +0800</pubDate>
-            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.2</link>
-            <sparkle:version>4</sparkle:version>
-            <sparkle:shortVersionString>1.2</sparkle:shortVersionString>
+            <title>1.2.1</title>
+            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.2.1</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"># ProfileSmith 1.2
+            <description sparkle:format="markdown"># ProfileSmith 1.2.1
 
-- 修复“美化文件名”后描述文件可能消失的问题，重命名冲突时不再破坏原文件。
-- 新增 Finder 对 `.mobileprovision` / `.provisionprofile` 的“打开方式 -&gt; ProfileSmith”，可直接进入应用内预览或管理。
-- 主界面、详情页和预览窗口补齐 `Command+C` 与右键复制能力，批量操作和文本提取更直接。
-- 优化主界面加载反馈、右侧“预览”页的纵向布局与暗色主题显示，并修复主列表列宽拖拽和顶部刷新指示器状态异常。
+- Finder Quick Look 预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView。
+- 原生 Quick Look 预览改为纵向信息布局，暗色主题下与主应用保持一致。
+- README 新增最新界面截图，补充当前版本展示效果。
 </description>
-            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.2/ProfileSmith_V_1.2.dmg" length="8811466" type="application/octet-stream" sparkle:edSignature="4SEaV7hWJ/hGatstyb/9QgBHvAcQ2q1Id7wkYvuJhQPxJC6TNQ8WbRfGfgQTc9fX9phHZ4Q0aYzIhXqG35BkDw==" />
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.2.1/ProfileSmith_V_1.2.1.dmg" length="8901767" type="application/octet-stream" sparkle:edSignature="bj+Ev+qRuyxzYWAF5jwBWqe9iutXqfdumLHucQzgci5LLW+2C6AFuXgABdiqZcGHLiauXwtrEIlv2jDqyV5vDA==" />
+            <sparkle:deltas>
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith5-3.delta" sparkle:deltaFrom="3" length="942866" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="ME0vQ8MRlDAbuhPyVzdtvslV0vyDejPjV6ZuBMfy0qZ263WzWfvxiYRkjFIGumQrbmnoI+5eXiOxoHiV6D+6Bw==" />
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith5-1.delta" sparkle:deltaFrom="1" length="1172918" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="uumjtKQ0cuYg99mYde2VtXG+k5n5KKnXuyAFiyTopRdnKbrQw94xvEU4pIbvlXEygprnVYChpgbiSsAYZmJ3Dw==" />
+            </sparkle:deltas>
+        </item>
+        <item>
+            <title>1.1</title>
+            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.1</link>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.1
+
+- 修复单个描述文件执行“美化文件名”后详情面板仍引用旧路径、需要手动刷新才能恢复的问题。
+- 优化索引刷新队列，文件变更期间触发的刷新不会再被后台扫描吞掉。
+- 重做快速预览窗口“总览”页，改为原生 AppKit 总览表格，样式与“描述文件”tab 对齐。
+- 新增“偏好设置”窗口，可配置更新检查策略，并在 Sparkle 可用时控制自动下载更新。
+- 补齐项目 README、测试覆盖与 1.1 发布资料。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.1/ProfileSmith_V_1.1.dmg" length="8795910" type="application/octet-stream" sparkle:edSignature="vUiXAlcvXeu2/mZaKepspFLm7HLJlLPbcK4q36JuBkcRM1Z5GZK+Sc0OLEuQ2mmBJ+pMzJAU8GUf0AoXkVByDg==" />
+        </item>
+        <item>
+            <title>1.0</title>
+            <pubDate>Mon, 16 Mar 2026 17:20:15 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.0</link>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.0
+
+- Built a new macOS provisioning profile manager from the ground up in Swift.
+- Indexed profiles with SQLite + GRDB for fast search, filtering, and sorting at scale.
+- Added archive and bundle inspection for apps, IPAs, XCArchives, and extensions.
+- Included Quick Look integration, drag and drop import, safe export, and filename beautification.
+- Added a status bar menu and Sparkle-based update support.
+- Covered parser, database, scanner, file operations, and UI controller behavior with automated tests.
+
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.0/ProfileSmith_V_1.0.dmg" length="8565985" type="application/octet-stream" sparkle:edSignature="zG8IXVjMOC7ZHHnh4eVuy7q0VirnXkwoyJPSR7T7UD4KheRAuCEVVL/WTou8BEfIiPS3QfK3qDQUYtYME84+DA==" />
         </item>
         <link>https://github.com/wangwanjie/ProfileSmith</link>
         <description>ProfileSmith release feed.</description>
