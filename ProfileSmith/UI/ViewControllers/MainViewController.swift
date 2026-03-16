@@ -22,6 +22,11 @@ final class MainViewController: NSViewController {
     private let importButton = NSButton(title: "导入/预览…", target: nil, action: nil)
     private let pluginButton = NSButton(title: "Finder Quick Look", target: nil, action: nil)
     private let progressIndicator = NSProgressIndicator()
+    private let loadingOverlay = NSView()
+    private let loadingPanel = NSVisualEffectView()
+    private let loadingTitleLabel = NSTextField(labelWithString: "正在加载描述文件…")
+    private let loadingHintLabel = NSTextField(labelWithString: "首次扫描或目录内容较多时会稍慢一些。")
+    private let loadingPanelIndicator = NSProgressIndicator()
 
     private let splitView = NSSplitView()
     private let tableContainer = NSView()
@@ -43,6 +48,7 @@ final class MainViewController: NSViewController {
     private let statusLabel = NSTextField(labelWithString: "准备就绪")
     private var preferredSplitPosition: CGFloat?
     private var isApplyingPreferredSplitPosition = false
+    private var isRepositoryRefreshing = false
 
     private let minimumTablePaneWidth: CGFloat = 360
     private let minimumDetailPaneWidth: CGFloat = 540
@@ -163,7 +169,27 @@ final class MainViewController: NSViewController {
         progressIndicator.style = .spinning
         progressIndicator.controlSize = .small
         progressIndicator.isDisplayedWhenStopped = false
+        progressIndicator.isHidden = true
         progressIndicator.setAccessibilityIdentifier("main.progressIndicator")
+
+        loadingOverlay.wantsLayer = true
+        loadingOverlay.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
+        loadingOverlay.isHidden = true
+        loadingOverlay.setAccessibilityIdentifier("main.loadingOverlay")
+
+        loadingPanel.material = .hudWindow
+        loadingPanel.blendingMode = .withinWindow
+        loadingPanel.state = .active
+        loadingPanel.wantsLayer = true
+        loadingPanel.layer?.cornerRadius = 16
+
+        loadingPanelIndicator.style = .spinning
+        loadingPanelIndicator.controlSize = .regular
+        loadingPanelIndicator.isDisplayedWhenStopped = false
+
+        loadingTitleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        loadingHintLabel.font = .systemFont(ofSize: 12)
+        loadingHintLabel.textColor = .secondaryLabelColor
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshProfiles(_:))
@@ -218,7 +244,13 @@ final class MainViewController: NSViewController {
         view.addSubview(topBar)
         topBar.addSubview(topRow)
         view.addSubview(splitView)
+        view.addSubview(loadingOverlay)
         view.addSubview(statusLabel)
+
+        loadingOverlay.addSubview(loadingPanel)
+        loadingPanel.addSubview(loadingPanelIndicator)
+        loadingPanel.addSubview(loadingTitleLabel)
+        loadingPanel.addSubview(loadingHintLabel)
 
         topBar.snp.makeConstraints { make in
             make.top.leading.trailing.equalToSuperview()
@@ -238,6 +270,30 @@ final class MainViewController: NSViewController {
             make.bottom.equalTo(statusLabel.snp.top).offset(-8)
         }
 
+        loadingOverlay.snp.makeConstraints { make in
+            make.edges.equalTo(splitView)
+        }
+
+        loadingPanel.snp.makeConstraints { make in
+            make.center.equalToSuperview()
+            make.width.equalTo(320)
+        }
+
+        loadingPanelIndicator.snp.makeConstraints { make in
+            make.top.equalToSuperview().offset(18)
+            make.centerX.equalToSuperview()
+        }
+
+        loadingTitleLabel.snp.makeConstraints { make in
+            make.top.equalTo(loadingPanelIndicator.snp.bottom).offset(14)
+            make.leading.trailing.equalToSuperview().inset(20)
+        }
+
+        loadingHintLabel.snp.makeConstraints { make in
+            make.top.equalTo(loadingTitleLabel.snp.bottom).offset(6)
+            make.leading.trailing.bottom.equalToSuperview().inset(20)
+        }
+
         statusLabel.snp.makeConstraints { make in
             make.leading.trailing.equalToSuperview().inset(16)
             make.bottom.equalToSuperview().offset(-10)
@@ -253,12 +309,16 @@ final class MainViewController: NSViewController {
         tableView.selectionHighlightStyle = .sourceList
         tableView.rowHeight = 32
         tableView.allowsMultipleSelection = true
+        tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.setAccessibilityIdentifier("main.profilesTable")
         tableView.delegate = self
         tableView.dataSource = self
         tableView.doubleAction = #selector(previewSelectedItems(_:))
         tableView.quickLookHandler = { [weak self] in
             self?.previewSelectedItems(nil)
+        }
+        tableView.copyHandler = { [weak self] in
+            self?.copySelectedRowContents(nil)
         }
         tableView.menu = profileContextMenu
 
@@ -276,6 +336,7 @@ final class MainViewController: NSViewController {
             column.title = title
             column.width = width
             column.minWidth = 90
+            column.resizingMask = .userResizingMask
             tableView.addTableColumn(column)
         }
 
@@ -440,11 +501,8 @@ final class MainViewController: NSViewController {
         context.repository.$isRefreshing
             .receive(on: RunLoop.main)
             .sink { [weak self] isRefreshing in
-                if isRefreshing {
-                    self?.progressIndicator.startAnimation(nil)
-                } else {
-                    self?.progressIndicator.stopAnimation(nil)
-                }
+                guard let self else { return }
+                self.applyRepositoryRefreshState(isRefreshing, snapshot: self.context.repository.snapshot)
             }
             .store(in: &cancellables)
     }
@@ -461,7 +519,7 @@ final class MainViewController: NSViewController {
         } else {
             reloadSelectionDrivenUI()
         }
-        updateStatusLabel(snapshot: snapshot)
+        syncRepositoryRefreshState(snapshot: snapshot)
         stabilizeSplitViewLayout()
     }
 
@@ -523,7 +581,10 @@ final class MainViewController: NSViewController {
         titleLabel.stringValue = record.displayName
         subtitleLabel.stringValue = record.path
         summaryTextView.string = "正在解析描述文件详情…"
-        previewContentView.loadHTMLString("<html><body style='font-family:-apple-system;padding:24px;'>正在生成预览…</body></html>", baseURL: nil)
+        previewContentView.loadHTMLString(
+            makePreviewStatusHTML(title: "正在生成预览", message: "请稍候，ProfileSmith 正在整理描述文件和签名信息。"),
+            baseURL: nil
+        )
         typeBadge.configure(text: record.profileType, fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
         platformBadge.configure(text: record.profilePlatform, fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
         statusBadge.configure(text: record.statusText, fillColor: badgeColor(for: record).withAlphaComponent(0.16), textColor: badgeColor(for: record))
@@ -550,7 +611,7 @@ final class MainViewController: NSViewController {
         detailOutlineView.reloadData()
         summaryTextView.string = "解析失败：\(error.localizedDescription)"
         previewContentView.loadHTMLString(
-            "<html><body style='font-family:-apple-system;padding:24px;'>\(error.localizedDescription)</body></html>",
+            makePreviewStatusHTML(title: "预览生成失败", message: error.localizedDescription),
             baseURL: nil
         )
         stabilizeSplitViewLayout()
@@ -571,7 +632,7 @@ final class MainViewController: NSViewController {
         4. Finder Quick Look 已随应用内建；若 Finder 尚未识别，可点击顶部 `Finder Quick Look` 按钮刷新注册。
         """
         previewContentView.loadHTMLString(
-            "<html><body style='font-family:-apple-system;padding:32px;background:#f4f7fb;'><h1>ProfileSmith</h1><p>选择一个描述文件，或直接把文件拖进窗口。</p></body></html>",
+            makePreviewStatusHTML(title: "ProfileSmith", message: "选择一个描述文件，或直接把文件拖进窗口。"),
             baseURL: nil
         )
         currentInspectorRoot = nil
@@ -593,7 +654,7 @@ final class MainViewController: NSViewController {
             "\(record.displayName)\n  \(record.bundleIdentifier ?? record.appIDName ?? "-")\n  \(record.profileType ?? "-") | \(record.statusText)\n  \(record.path)"
         }.joined(separator: "\n\n")
         previewContentView.loadHTMLString(
-            "<html><body style='font-family:-apple-system;padding:24px;'><h2>已选择 \(records.count) 个描述文件</h2><p>批量操作可用，详情树和预览仅在单选时展示。</p></body></html>",
+            makePreviewStatusHTML(title: "已选择 \(records.count) 个描述文件", message: "批量操作可用，详情树和预览仅在单选时展示。"),
             baseURL: nil
         )
         currentParsedProfile = nil
@@ -601,6 +662,108 @@ final class MainViewController: NSViewController {
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
         stabilizeSplitViewLayout()
+    }
+
+    private func makePreviewStatusHTML(title: String, message: String) -> String {
+        let escapedTitle = escapePreviewHTML(title)
+        let escapedMessage = escapePreviewHTML(message).replacingOccurrences(of: "\n", with: "<br>")
+        return """
+        <!doctype html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light dark">
+        <style>
+        :root {
+            color-scheme: light dark;
+            --ink:#152132;
+            --muted:#5d7084;
+            --line:rgba(21,33,50,0.10);
+            --card:rgba(255,255,255,0.92);
+            --accent:#1e6fd9;
+            --tint:rgba(30,111,217,0.12);
+            --shadow:0 16px 36px rgba(36,54,84,0.10);
+            --bg-top:#f5f8fc;
+            --bg-bottom:#e9eff6;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --ink:#e8eef7;
+                --muted:#9badc2;
+                --line:rgba(194,208,228,0.14);
+                --card:rgba(18,25,35,0.94);
+                --accent:#7cb2ff;
+                --tint:rgba(124,178,255,0.16);
+                --shadow:0 18px 40px rgba(0,0,0,0.34);
+                --bg-top:#121923;
+                --bg-bottom:#0b1017;
+            }
+        }
+        * { box-sizing: border-box; }
+        html { background: var(--bg-bottom); }
+        body {
+            margin: 0;
+            padding: 18px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(98,146,220,0.18), transparent 30%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        }
+        .card {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 22px 24px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+        }
+        .badge {
+            display:inline-flex;
+            align-items:center;
+            margin-bottom:12px;
+            padding:8px 12px;
+            border-radius:999px;
+            background:var(--tint);
+            color:var(--accent);
+            font-size:12px;
+            font-weight:700;
+            letter-spacing:0.08em;
+            text-transform:uppercase;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+        p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        </style>
+        </head>
+        <body>
+            <section class="card">
+                <div class="badge">Preview</div>
+                <h1>\(escapedTitle)</h1>
+                <p>\(escapedMessage)</p>
+            </section>
+        </body>
+        </html>
+        """
+    }
+
+    private func escapePreviewHTML(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 
     private func makeSummaryText(for parsedProfile: ParsedProfile) -> String {
@@ -669,12 +832,41 @@ final class MainViewController: NSViewController {
         let expiredCount = snapshot.metrics.expiredCount
         let expiringSoonCount = snapshot.metrics.expiringSoonCount
         let refreshText = snapshot.lastRefreshDate.map { "最近刷新 \(Formatters.timestampString(from: $0))" } ?? "尚未刷新"
+        let prefix = isRepositoryRefreshing ? "正在加载… " : ""
 
         if selectionCount > 0 {
-            statusLabel.stringValue = "当前结果 \(currentResultCount) 条，已选中 \(selectionCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
+            statusLabel.stringValue = "\(prefix)当前结果 \(currentResultCount) 条，已选中 \(selectionCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
         } else {
-            statusLabel.stringValue = "当前结果 \(currentResultCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
+            statusLabel.stringValue = "\(prefix)当前结果 \(currentResultCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
         }
+    }
+
+    private func updateLoadingOverlay() {
+        let shouldShow = isRepositoryRefreshing && currentProfiles.isEmpty
+        loadingOverlay.isHidden = !shouldShow
+        if shouldShow {
+            loadingPanelIndicator.startAnimation(nil)
+        } else {
+            loadingPanelIndicator.stopAnimation(nil)
+        }
+    }
+
+    private func applyRepositoryRefreshState(_ isRefreshing: Bool, snapshot: RepositorySnapshot? = nil) {
+        isRepositoryRefreshing = isRefreshing
+        progressIndicator.isHidden = !isRefreshing
+        if isRefreshing {
+            progressIndicator.startAnimation(nil)
+        } else {
+            progressIndicator.stopAnimation(nil)
+        }
+        updateLoadingOverlay()
+        if let snapshot {
+            updateStatusLabel(snapshot: snapshot)
+        }
+    }
+
+    private func syncRepositoryRefreshState(snapshot: RepositorySnapshot? = nil) {
+        applyRepositoryRefreshState(context.repository.isRefreshing, snapshot: snapshot ?? context.repository.snapshot)
     }
 
     private func stabilizeSplitViewLayout() {
@@ -931,8 +1123,16 @@ final class MainViewController: NSViewController {
     @objc private func copySelectedPaths(_ sender: Any?) {
         let records = effectiveProfileContextSelection()
         guard !records.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(records.map(\.path).joined(separator: "\n"), forType: .string)
+        copyTextToPasteboard(records.map(\.path).joined(separator: "\n"))
+    }
+
+    @objc private func copySelectedRowContents(_ sender: Any?) {
+        let records = effectiveProfileContextSelection()
+        guard !records.isEmpty else { return }
+        let content = records
+            .map(tableRowClipboardString(for:))
+            .joined(separator: "\n")
+        copyTextToPasteboard(content)
     }
 
     @objc private func exportSelectedCertificate(_ sender: Any?) {
@@ -963,14 +1163,28 @@ final class MainViewController: NSViewController {
 
     @objc private func copyCertificateSHA1(_ sender: Any?) {
         guard let summary = effectiveInspectorNode()?.certificateSummary else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(summary.sha1, forType: .string)
+        copyTextToPasteboard(summary.sha1)
     }
 
     @objc private func copyCertificateSHA256(_ sender: Any?) {
         guard let summary = effectiveInspectorNode()?.certificateSummary else { return }
+        copyTextToPasteboard(summary.sha256)
+    }
+
+    private func tableRowClipboardString(for record: ProfileRecord) -> String {
+        [
+            record.displayName,
+            record.bundleIdentifier ?? record.appIDName ?? "-",
+            record.teamName ?? "-",
+            record.profileType ?? "-",
+            record.expirationDateValue.map(Formatters.dayString(from:)) ?? "-",
+            record.statusText,
+        ].joined(separator: "\t")
+    }
+
+    private func copyTextToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(summary.sha256, forType: .string)
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 
@@ -1170,6 +1384,10 @@ extension MainViewController: NSMenuDelegate {
             copyPathItem.target = self
             menu.addItem(copyPathItem)
 
+            let copyRowItem = NSMenuItem(title: "复制行内容", action: #selector(copySelectedRowContents(_:)), keyEquivalent: "")
+            copyRowItem.target = self
+            menu.addItem(copyRowItem)
+
             let exportItem = NSMenuItem(title: "导出描述文件…", action: #selector(exportSelectedProfile(_:)), keyEquivalent: "")
             exportItem.target = self
             exportItem.isEnabled = selection.count == 1
@@ -1218,9 +1436,14 @@ extension MainViewController {
     var debugPreviewText: String { previewContentView.debugPlainText }
     var debugSearchField: NSSearchField { searchField }
     var debugStatusLabel: NSTextField { statusLabel }
+    var debugProgressIndicator: NSProgressIndicator { progressIndicator }
 
     func debugApplySnapshot(_ snapshot: RepositorySnapshot) {
         applySnapshot(snapshot)
+    }
+
+    func debugApplyRepositoryRefreshState(_ isRefreshing: Bool) {
+        applyRepositoryRefreshState(isRefreshing, snapshot: context.repository.snapshot)
     }
 
     func debugReloadSelectionDrivenUI() {

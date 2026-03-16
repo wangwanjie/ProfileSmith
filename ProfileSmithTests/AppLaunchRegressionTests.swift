@@ -65,4 +65,15 @@ struct AppLaunchRegressionTests {
         #expect(paths.embeddedQuickLookPreviewExtensionURL.lastPathComponent == "ProfileSmithQuickLookPreview.appex")
         #expect(paths.embeddedQuickLookThumbnailExtensionURL.lastPathComponent == "ProfileSmithQuickLookThumbnail.appex")
     }
+
+    @Test
+    func appInfoDeclaresProvisioningProfileDocumentTypes() throws {
+        let documentTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleDocumentTypes") as? [[String: Any]] ?? []
+        let declaredContentTypes = documentTypes
+            .flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }
+
+        #expect(declaredContentTypes.contains("com.apple.mobileprovision"))
+        #expect(declaredContentTypes.contains("com.apple.iphone.mobileprovision"))
+        #expect(declaredContentTypes.contains("com.apple.provisionprofile"))
+    }
 }

@@ -157,23 +157,33 @@ final class ArchiveInspector {
     }
 
     static func renderHTML(title: String, profile: ParsedProfile?, infoPlist: [String: Any]?) -> String {
+        let entitlements = profile?.plist["Entitlements"] as? [String: Any] ?? [:]
         let summaryRows: [(String, String)] = [
             ("名称", profile?.record.displayName ?? title),
             ("Bundle ID", profile?.record.bundleIdentifier ?? "-"),
+            ("App ID Name", profile?.record.appIDName ?? "-"),
             ("团队", profile?.record.teamName ?? "-"),
+            ("Team ID", profile?.record.teamIdentifier ?? "-"),
             ("类型", profile?.record.profileType ?? "-"),
             ("平台", profile?.record.profilePlatform ?? "-"),
+            ("UUID", profile?.record.uuid ?? "-"),
+            ("创建", profile?.record.creationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
             ("到期", profile?.record.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
+            ("Application ID", profile?.record.applicationIdentifier ?? "-"),
             ("证书", "\(profile?.record.certificateCount ?? 0)"),
             ("设备", "\(profile?.record.deviceCount ?? 0)"),
         ]
 
+        let entitlementRows = entitlements.keys.sorted().map { key in
+            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(String(describing: entitlements[key] ?? "")))</code></td></tr>"
+        }.joined()
+
         let infoRows = (infoPlist ?? [:]).keys.sorted().prefix(20).map { key in
-            "<tr><th>\(escapeHTML(key))</th><td>\(escapeHTML(String(describing: infoPlist?[key] ?? "")))</td></tr>"
+            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(String(describing: infoPlist?[key] ?? "")))</code></td></tr>"
         }.joined()
 
         let certificateRows = (profile?.certificates ?? []).map { certificate in
-            "<li><strong>\(escapeHTML(certificate.summary))</strong><br><code>\(escapeHTML(certificate.sha1))</code></li>"
+            "<li><strong>\(escapeHTML(certificate.summary))</strong><code>\(escapeHTML(certificate.sha1))</code></li>"
         }.joined()
 
         let detailRows = summaryRows.map { pair in
@@ -185,30 +195,165 @@ final class ArchiveInspector {
         <html>
         <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light dark">
         <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 24px; color: #152132; background: linear-gradient(180deg, #f7fafc, #eef3f8); }
-        h1 { margin: 0 0 16px; font-size: 28px; }
-        h2 { margin: 28px 0 10px; font-size: 18px; }
-        .card { background: rgba(255,255,255,0.88); border: 1px solid #dbe4ee; border-radius: 16px; padding: 18px; box-shadow: 0 10px 30px rgba(36, 54, 84, 0.08); }
+        :root {
+            color-scheme: light dark;
+            --ink:#152132;
+            --muted:#5d7084;
+            --line:rgba(21,33,50,0.10);
+            --card:rgba(255,255,255,0.92);
+            --card-strong:#ffffff;
+            --accent:#1e6fd9;
+            --tint:rgba(30,111,217,0.12);
+            --shadow:0 16px 36px rgba(36,54,84,0.10);
+            --header-bg:rgba(21,33,50,0.03);
+            --bg-top:#f5f8fc;
+            --bg-bottom:#e9eff6;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --ink:#e8eef7;
+                --muted:#9badc2;
+                --line:rgba(194,208,228,0.14);
+                --card:rgba(18,25,35,0.94);
+                --card-strong:rgba(24,33,45,0.98);
+                --accent:#7cb2ff;
+                --tint:rgba(124,178,255,0.16);
+                --shadow:0 18px 40px rgba(0,0,0,0.34);
+                --header-bg:rgba(255,255,255,0.04);
+                --bg-top:#121923;
+                --bg-bottom:#0b1017;
+            }
+        }
+        * { box-sizing: border-box; }
+        html { background: var(--bg-bottom); }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            margin: 0;
+            padding: 18px;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(98,146,220,0.18), transparent 30%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        }
+        .page { max-width: 920px; margin: 0 auto; }
+        .stack { display:flex; flex-direction:column; gap:16px; }
+        .hero {
+            padding:22px 24px;
+            border:1px solid var(--line);
+            border-radius:18px;
+            background:var(--card);
+            box-shadow:var(--shadow);
+        }
+        .badge {
+            display:inline-flex;
+            align-items:center;
+            margin-bottom:12px;
+            padding:8px 12px;
+            border-radius:999px;
+            background:var(--tint);
+            color:var(--accent);
+            font-size:12px;
+            font-weight:700;
+            letter-spacing:0.08em;
+            text-transform:uppercase;
+        }
+        h1 { margin: 0; font-size: 28px; line-height: 1.15; }
+        .subtitle { margin-top:8px; color:var(--muted); font-size:14px; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            overflow:hidden;
+            box-shadow: var(--shadow);
+        }
+        .card h2 {
+            margin:0;
+            padding:16px 18px 10px;
+            font-size:18px;
+            background:linear-gradient(180deg, var(--header-bg), transparent);
+        }
         table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; vertical-align: top; padding: 8px 0; border-bottom: 1px solid #ecf1f6; font-size: 13px; }
-        th { width: 140px; color: #4f6076; font-weight: 600; }
-        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
-        ul { margin: 0; padding-left: 20px; }
+        th, td {
+            text-align: left;
+            vertical-align: top;
+            padding: 11px 18px;
+            border-top: 1px solid var(--line);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+        th {
+            width: 176px;
+            color: var(--muted);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        td { color: var(--ink); overflow-wrap: anywhere; }
+        code {
+            display:block;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0 18px 18px;
+        }
+        li {
+            margin: 0;
+            padding: 14px 0;
+            border-top: 1px solid var(--line);
+        }
+        strong {
+            display:block;
+            margin-bottom:6px;
+            font-size:13px;
+        }
+        .empty { padding: 0 18px 18px; color:var(--muted); font-size:13px; }
+        @media (max-width: 760px) {
+            body { padding: 14px; }
+            .hero { padding: 18px; }
+            h1 { font-size: 24px; }
+            th { width: 136px; }
+        }
+        @media (max-width: 520px) {
+            table, tbody, tr, th, td { display: block; width: 100%; }
+            th { padding-bottom: 4px; border-top: 1px solid var(--line); }
+            td { padding-top: 0; padding-bottom: 12px; }
+        }
         </style>
         </head>
         <body>
-        <h1>\(escapeHTML(title))</h1>
-        <div class="card">
-        <table>\(detailRows)</table>
-        </div>
-        <h2>Info.plist</h2>
-        <div class="card">
-        <table>\(infoRows.isEmpty ? "<tr><td>没有可显示的 Info.plist 数据</td></tr>" : infoRows)</table>
-        </div>
-        <h2>证书</h2>
-        <div class="card">
-        <ul>\(certificateRows.isEmpty ? "<li>没有证书数据</li>" : certificateRows)</ul>
+        <div class="page">
+            <div class="stack">
+                <section class="hero">
+                    <div class="badge">Preview</div>
+                    <h1>\(escapeHTML(title))</h1>
+                    <div class="subtitle">在当前窗口中查看描述文件概要、Entitlements、Info.plist 与证书摘要。</div>
+                </section>
+                <section class="card">
+                    <h2>概要</h2>
+                    <table>\(detailRows)</table>
+                </section>
+                <section class="card">
+                    <h2>Entitlements</h2>
+                    \(entitlementRows.isEmpty ? "<div class=\"empty\">没有可显示的 Entitlements</div>" : "<table>\(entitlementRows)</table>")
+                </section>
+                <section class="card">
+                    <h2>Info.plist</h2>
+                    \(infoRows.isEmpty ? "<div class=\"empty\">没有可显示的 Info.plist 数据</div>" : "<table>\(infoRows)</table>")
+                </section>
+                <section class="card">
+                    <h2>证书</h2>
+                    \(certificateRows.isEmpty ? "<div class=\"empty\">没有证书数据</div>" : "<ul>\(certificateRows)</ul>")
+                </section>
+            </div>
         </div>
         </body>
         </html>

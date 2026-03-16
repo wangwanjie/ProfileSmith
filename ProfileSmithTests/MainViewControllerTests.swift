@@ -181,6 +181,39 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
+    func profilesTableColumnsRemainUserResizableAndRefreshIndicatorStops() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+
+        #expect(controller.debugTableView.columnAutoresizingStyle == .noColumnAutoresizing)
+        #expect(controller.debugTableView.tableColumns.count >= 3)
+        #expect(controller.debugTableView.tableColumns[0].resizingMask.contains(.userResizingMask))
+        #expect(controller.debugTableView.tableColumns[1].resizingMask.contains(.userResizingMask))
+        #expect(controller.debugTableView.tableColumns[2].resizingMask.contains(.userResizingMask))
+
+        controller.debugApplyRepositoryRefreshState(true)
+        #expect(controller.debugProgressIndicator.isHidden == false)
+
+        controller.debugApplyRepositoryRefreshState(false)
+        #expect(controller.debugProgressIndicator.isHidden)
+    }
+
+    @MainActor
+    @Test
     func previewWindowControllerLoadsProfileAndInfoTabs() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
@@ -214,6 +247,78 @@ struct MainViewControllerTests {
 
         controller.debugSelectSegment(2)
         #expect(controller.debugInfoOutlineView.numberOfRows > 0)
+    }
+
+    @MainActor
+    @Test
+    func mainTableAndPreviewWindowSupportCopyingSelectedRows() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "copy-target",
+            name: "Copy Ready",
+            uuid: "COPY-AAAA-BBBB-CCCC-DDDD",
+            teamName: "Copy Team",
+            teamIdentifier: "COPY1234",
+            bundleIdentifier: "com.example.copy"
+        )
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let parser = MobileProvisionParser()
+        let record = try parser.parseProfile(
+            at: embeddedProfileURL,
+            sourceLocation: ScanLocation(kind: .custom, url: scanDirectory, displayName: "Tests")
+        ).record
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [record],
+                metrics: ProfileMetrics(totalCount: 1, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        controller.debugTableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        controller.debugTableView.copy(nil)
+        let mainCopy = NSPasteboard.general.string(forType: .string) ?? ""
+        #expect(mainCopy.contains("Copy Ready"))
+        #expect(mainCopy.contains("com.example.copy"))
+
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewCopyHost",
+            displayName: "Preview Copy Host",
+            bundleIdentifier: "com.example.preview.copy",
+            embeddedProfileURL: embeddedProfileURL
+        )
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let previewController = PreviewWindowController(inspection: inspection)
+
+        previewController.debugSelectOverviewRows(IndexSet(integer: 0))
+        previewController.debugCopyOverviewSelection()
+        let overviewCopy = NSPasteboard.general.string(forType: .string) ?? ""
+        #expect(overviewCopy.contains("文件"))
+
+        previewController.debugSelectSegment(1)
+        previewController.debugSelectProfileRows(IndexSet(integer: 0))
+        previewController.debugCopyProfileSelection()
+        let profileCopy = NSPasteboard.general.string(forType: .string) ?? ""
+        #expect(!profileCopy.isEmpty)
     }
 }
 

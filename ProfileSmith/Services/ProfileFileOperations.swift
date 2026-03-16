@@ -92,8 +92,8 @@ final class ProfileFileOperations {
             return currentURL
         }
 
-        try fileManager.moveItem(at: currentURL, to: backupURL)
-        try fileManager.copyItem(at: backupURL, to: destinationURL)
+        try fileManager.copyItem(at: currentURL, to: backupURL)
+        try fileManager.moveItem(at: currentURL, to: destinationURL)
         return destinationURL
     }
 

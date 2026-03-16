@@ -8,6 +8,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 - SQLite + GRDB 建索引，支持按名称、Bundle ID、Team、UUID、类型全文搜索
 - 详情面板展示概要、Entitlements、证书摘要和原始 plist 结构
 - 支持导入、导出、Finder 定位、移到废纸篓、彻底删除、文件名美化
+- 已声明描述文件文档类型，可在 Finder 中通过“打开方式”使用 ProfileSmith 打开 `.mobileprovision` / `.provisionprofile`
 - 内建 Finder Quick Look 扩展，可预览描述文件、IPA、XCArchive、App、App Extension
 - 集成 Sparkle / GitHub Releases 更新检查，并可在偏好设置里配置检查策略
 
@@ -24,7 +25,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 
 要求：
 
-- Xcode 17 或更新版本
+- Xcode 26 或更新版本
 - macOS 10.15 及以上
 
 常用命令：
@@ -52,6 +53,7 @@ xcodebuild test \
 3. 拖入 `.mobileprovision` / `.provisionprofile` 会执行导入。
 4. 拖入 `.ipa` / `.xcarchive` / `.app` / `.appex` 会打开预览窗口。
 5. 通过“偏好设置…”可以切换更新策略：手动检查、每天自动检查、启动时检查。
+6. 在 Finder 中右键描述文件，选择“打开方式 -> ProfileSmith”可以直接进入应用内预览或管理。
 
 ## 发布
 
@@ -74,8 +76,10 @@ xcodebuild test \
 4. 发布 GitHub Release
 5. 生成并提交 `appcast.xml`
 
-## 1.1 更新
+## 1.2 更新
 
-- 修复美化文件名后的详情刷新异常
-- 修正快速预览窗口总览页 UI
-- 新增偏好设置中的更新策略配置
+- 修复美化文件名后描述文件可能消失的问题
+- 新增 Finder 中对 `.mobileprovision` / `.provisionprofile` 的“打开方式 -> ProfileSmith”
+- 增加主界面与预览窗口的复制快捷键与右键拷贝
+- 优化主界面加载态、右侧预览页布局与暗色主题适配
+- 修复主列表列宽拖拽与顶部刷新指示器状态异常

@@ -1,23 +1,27 @@
 import Cocoa
 import SnapKit
+import WebKit
 
 private struct PreviewOverviewRow {
     let key: String
     let value: String
 }
 
-final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     private let inspection: PreviewInspection
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let segmentedControl = NSSegmentedControl(labels: ["总览", "描述文件", "Info.plist"], trackingMode: .selectOne, target: nil, action: nil)
     private let tabView = NSTabView()
-    private let overviewTableView = NSTableView()
+    private let overviewTableView = CopyableTableView()
     private let overviewScrollView = NSScrollView()
-    private let profileOutlineView = NSOutlineView()
+    private let profileOutlineView = CopyableOutlineView()
     private let profileOutlineScrollView = NSScrollView()
-    private let infoOutlineView = NSOutlineView()
+    private let infoOutlineView = CopyableOutlineView()
     private let infoOutlineScrollView = NSScrollView()
+    private let overviewContextMenu = NSMenu()
+    private let profileContextMenu = NSMenu()
+    private let infoContextMenu = NSMenu()
     private var overviewRows: [PreviewOverviewRow] = []
     private var profileRootNode: InspectorNode?
     private var infoRootNode: InspectorNode?
@@ -67,6 +71,23 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         configureOverviewTableView()
         configureOutlineView(profileOutlineView)
         configureOutlineView(infoOutlineView)
+
+        overviewTableView.copyHandler = { [weak self] in
+            self?.copySelectedOverviewRows(nil)
+        }
+        profileOutlineView.copyHandler = { [weak self] in
+            self?.copySelectedProfileRows(nil)
+        }
+        infoOutlineView.copyHandler = { [weak self] in
+            self?.copySelectedInfoRows(nil)
+        }
+
+        overviewContextMenu.delegate = self
+        profileContextMenu.delegate = self
+        infoContextMenu.delegate = self
+        overviewTableView.menu = overviewContextMenu
+        profileOutlineView.menu = profileContextMenu
+        infoOutlineView.menu = infoContextMenu
 
         overviewScrollView.documentView = overviewTableView
         overviewScrollView.hasVerticalScroller = true
@@ -263,10 +284,59 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         return cell
     }
 
+    @objc private func copySelectedOverviewRows(_ sender: Any?) {
+        let rows = selectedOverviewRows()
+        guard !rows.isEmpty else { return }
+        let text = rows
+            .map { "\($0.key)\t\($0.value)" }
+            .joined(separator: "\n")
+        copyTextToPasteboard(text)
+    }
+
+    @objc private func copySelectedProfileRows(_ sender: Any?) {
+        let nodes = selectedInspectorNodes(in: profileOutlineView)
+        guard !nodes.isEmpty else { return }
+        copyTextToPasteboard(nodes.map(inspectorClipboardString(for:)).joined(separator: "\n"))
+    }
+
+    @objc private func copySelectedInfoRows(_ sender: Any?) {
+        let nodes = selectedInspectorNodes(in: infoOutlineView)
+        guard !nodes.isEmpty else { return }
+        copyTextToPasteboard(nodes.map(inspectorClipboardString(for:)).joined(separator: "\n"))
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        if menu === overviewContextMenu {
+            let item = NSMenuItem(title: "复制选中行", action: #selector(copySelectedOverviewRows(_:)), keyEquivalent: "")
+            item.target = self
+            item.isEnabled = !selectedOverviewRows().isEmpty
+            menu.addItem(item)
+            return
+        }
+
+        let action: Selector
+        let hasSelection: Bool
+        if menu === profileContextMenu {
+            action = #selector(copySelectedProfileRows(_:))
+            hasSelection = !selectedInspectorNodes(in: profileOutlineView).isEmpty
+        } else {
+            action = #selector(copySelectedInfoRows(_:))
+            hasSelection = !selectedInspectorNodes(in: infoOutlineView).isEmpty
+        }
+
+        let item = NSMenuItem(title: "复制选中行", action: action, keyEquivalent: "")
+        item.target = self
+        item.isEnabled = hasSelection
+        menu.addItem(item)
+    }
+
     private func configureOverviewTableView() {
         overviewTableView.headerView = nil
         overviewTableView.usesAlternatingRowBackgroundColors = false
-        overviewTableView.selectionHighlightStyle = .none
+        overviewTableView.selectionHighlightStyle = .regular
+        overviewTableView.allowsMultipleSelection = true
         overviewTableView.rowHeight = 30
         overviewTableView.dataSource = self
         overviewTableView.delegate = self
@@ -286,6 +356,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         outlineView.headerView = nil
         outlineView.usesAlternatingRowBackgroundColors = false
         outlineView.rowSizeStyle = .medium
+        outlineView.allowsMultipleSelection = true
         outlineView.dataSource = self
         outlineView.delegate = self
 
@@ -302,6 +373,49 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         outlineView.addTableColumn(typeColumn)
         outlineView.addTableColumn(detailColumn)
         outlineView.outlineTableColumn = keyColumn
+    }
+
+    private func selectedOverviewRows() -> [PreviewOverviewRow] {
+        let indexes = effectiveSelectedIndexes(in: overviewTableView)
+        return indexes.compactMap { index in
+            guard overviewRows.indices.contains(index) else { return nil }
+            return overviewRows[index]
+        }
+    }
+
+    private func selectedInspectorNodes(in outlineView: NSOutlineView) -> [InspectorNode] {
+        let indexes = effectiveSelectedIndexes(in: outlineView)
+        return indexes.compactMap { outlineView.item(atRow: $0) as? InspectorNode }
+    }
+
+    private func effectiveSelectedIndexes(in tableView: NSTableView) -> IndexSet {
+        if !tableView.selectedRowIndexes.isEmpty {
+            return tableView.selectedRowIndexes
+        }
+        let clickedRow = tableView.clickedRow
+        guard clickedRow >= 0 else { return [] }
+        return IndexSet(integer: clickedRow)
+    }
+
+    private func effectiveSelectedIndexes(in outlineView: NSOutlineView) -> IndexSet {
+        if !outlineView.selectedRowIndexes.isEmpty {
+            return outlineView.selectedRowIndexes
+        }
+        let clickedRow = outlineView.clickedRow
+        guard clickedRow >= 0 else { return [] }
+        return IndexSet(integer: clickedRow)
+    }
+
+    private func inspectorClipboardString(for node: InspectorNode) -> String {
+        let parts = [node.key, node.type, node.detail]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return parts.joined(separator: "\t")
+    }
+
+    private func copyTextToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func rootNode(for outlineView: NSOutlineView) -> InspectorNode? {
@@ -363,6 +477,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
 #if DEBUG
 extension PreviewWindowController {
     var debugSegmentedControl: NSSegmentedControl { segmentedControl }
+    var debugOverviewTableView: NSTableView { overviewTableView }
     var debugProfileOutlineView: NSOutlineView { profileOutlineView }
     var debugInfoOutlineView: NSOutlineView { infoOutlineView }
     var debugOverviewRows: [String] { overviewRows.map { "\($0.key): \($0.value)" } }
@@ -372,12 +487,82 @@ extension PreviewWindowController {
         segmentedControl.selectedSegment = index
         updateOutlineForSelectedSegment()
     }
+
+    func debugSelectOverviewRows(_ indexes: IndexSet) {
+        overviewTableView.selectRowIndexes(indexes, byExtendingSelection: false)
+    }
+
+    func debugSelectProfileRows(_ indexes: IndexSet) {
+        profileOutlineView.selectRowIndexes(indexes, byExtendingSelection: false)
+    }
+
+    func debugCopyOverviewSelection() {
+        copySelectedOverviewRows(nil)
+    }
+
+    func debugCopyProfileSelection() {
+        copySelectedProfileRows(nil)
+    }
 }
 #endif
 
+private final class CopyableTableView: NSTableView {
+    var copyHandler: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        let modifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "c" {
+            copy(self)
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        copyHandler?()
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) {
+            return selectedRowIndexes.isEmpty == false || clickedRow >= 0
+        }
+
+        return super.validateUserInterfaceItem(item)
+    }
+}
+
+private final class CopyableOutlineView: NSOutlineView {
+    var copyHandler: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        let modifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "c" {
+            copy(self)
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        copyHandler?()
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) {
+            return selectedRowIndexes.isEmpty == false || clickedRow >= 0
+        }
+
+        return super.validateUserInterfaceItem(item)
+    }
+}
+
 final class HTMLPreviewView: NSView {
-    private let scrollView = NSScrollView()
-    private let textView = NSTextView()
+    private let webView = WKWebView(frame: .zero)
+    #if DEBUG
+    private var debugPlainTextStorage = ""
+    #endif
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -389,72 +574,44 @@ final class HTMLPreviewView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func loadHTMLString(_ html: String, baseURL _: URL?) {
-        textView.textStorage?.setAttributedString(Self.attributedString(from: html))
-        scrollView.contentView.scroll(to: .zero)
-        scrollView.reflectScrolledClipView(scrollView.contentView)
+    func loadHTMLString(_ html: String, baseURL: URL?) {
+        #if DEBUG
+        debugPlainTextStorage = Self.plainText(from: html)
+        #endif
+        webView.loadHTMLString(html, baseURL: baseURL)
     }
 
     private func buildUI() {
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
-        scrollView.drawsBackground = false
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.75).cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
 
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.drawsBackground = false
-        textView.isRichText = true
-        textView.importsGraphics = false
-        textView.allowsUndo = false
-        textView.textContainerInset = NSSize(width: 18, height: 18)
-        textView.minSize = .zero
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = true
-        textView.linkTextAttributes = [
-            .foregroundColor: NSColor.systemBlue,
-            .underlineStyle: NSUnderlineStyle.single.rawValue,
-        ]
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.allowsMagnification = false
 
-        scrollView.documentView = textView
-        addSubview(scrollView)
-        scrollView.snp.makeConstraints { make in
+        addSubview(webView)
+        webView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
     }
 
-    private static func attributedString(from html: String) -> NSAttributedString {
-        guard let data = html.data(using: .utf8) else {
-            return NSAttributedString(string: html)
-        }
-
-        do {
-            let attributedString = try NSMutableAttributedString(
-                data: data,
-                options: [
-                    .documentType: NSAttributedString.DocumentType.html,
-                    .characterEncoding: String.Encoding.utf8.rawValue,
-                ],
-                documentAttributes: nil
-            )
-            let fullRange = NSRange(location: 0, length: attributedString.length)
-            attributedString.enumerateAttribute(.font, in: fullRange) { value, range, _ in
-                guard let font = value as? NSFont else { return }
-                let pointSize = font.pointSize == 12 ? CGFloat(13) : font.pointSize
-                attributedString.addAttribute(.font, value: NSFont.systemFont(ofSize: pointSize), range: range)
-            }
-            attributedString.removeAttribute(.backgroundColor, range: fullRange)
-            return attributedString
-        } catch {
-            return NSAttributedString(string: html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
-        }
+    private static func plainText(from html: String) -> String {
+        html
+            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     #if DEBUG
     var debugPlainText: String {
-        textView.string
+        debugPlainTextStorage
     }
     #endif
 }
