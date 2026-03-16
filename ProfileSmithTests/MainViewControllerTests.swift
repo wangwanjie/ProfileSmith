@@ -206,7 +206,8 @@ struct MainViewControllerTests {
         let controller = PreviewWindowController(inspection: inspection)
 
         #expect(controller.debugTitleLabel.stringValue == "Preview Host")
-        #expect(controller.debugPreviewText.contains("Preview Host"))
+        #expect(controller.debugOverviewRows.contains(where: { $0.contains("名称: Preview Host") }))
+        #expect(controller.debugOverviewRows.contains(where: { $0.contains("描述文件: Embedded Preview") }))
 
         controller.debugSelectSegment(1)
         #expect(controller.debugProfileOutlineView.numberOfRows > 0)

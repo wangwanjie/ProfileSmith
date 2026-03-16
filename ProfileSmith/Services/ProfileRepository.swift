@@ -22,6 +22,8 @@ final class ProfileRepository {
     private let workQueue = DispatchQueue(label: "cn.vanjay.ProfileSmith.repository", qos: .userInitiated)
 
     private var query = ProfileQuery()
+    private var pendingRefreshRequested = false
+    private var pendingRefreshForceReindex = false
 
     init(database: ProfileDatabase, scanner: ProfileScanner, parser: MobileProvisionParser, archiveInspector: ArchiveInspector) {
         self.database = database
@@ -58,7 +60,11 @@ final class ProfileRepository {
     }
 
     func refresh(forceReindex: Bool) {
-        guard !isRefreshing else { return }
+        if isRefreshing {
+            pendingRefreshRequested = true
+            pendingRefreshForceReindex = pendingRefreshForceReindex || forceReindex
+            return
+        }
         isRefreshing = true
 
         workQueue.async { [weak self] in
@@ -77,11 +83,13 @@ final class ProfileRepository {
                         lastRefreshDate: date
                     )
                     self.isRefreshing = false
+                    self.flushPendingRefreshIfNeeded()
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isRefreshing = false
                     NSApp.presentError(error)
+                    self.flushPendingRefreshIfNeeded()
                 }
             }
         }
@@ -121,5 +129,14 @@ final class ProfileRepository {
                 }
             }
         }
+    }
+
+    @MainActor
+    private func flushPendingRefreshIfNeeded() {
+        guard pendingRefreshRequested else { return }
+        let forceReindex = pendingRefreshForceReindex
+        pendingRefreshRequested = false
+        pendingRefreshForceReindex = false
+        refresh(forceReindex: forceReindex)
     }
 }

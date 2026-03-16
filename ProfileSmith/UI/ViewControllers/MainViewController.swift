@@ -761,6 +761,13 @@ final class MainViewController: NSViewController {
         return .systemGreen
     }
 
+    private func optimisticRenamedRecord(from record: ProfileRecord, renamedURL: URL) -> ProfileRecord {
+        var renamedRecord = record
+        renamedRecord.path = renamedURL.path
+        renamedRecord.fileName = renamedURL.deletingPathExtension().lastPathComponent
+        return renamedRecord
+    }
+
     private func makeActionButton(title: String, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
@@ -881,6 +888,9 @@ final class MainViewController: NSViewController {
         do {
             let renamedURL = try context.fileOperations.beautifyFilename(for: record)
             selectedPaths = [renamedURL.path]
+            detailRequestID &+= 1
+            prepareDetailLoadingState(for: optimisticRenamedRecord(from: record, renamedURL: renamedURL))
+            summaryTextView.string = "已完成文件名美化，正在刷新索引与详情…"
             context.repository.refresh(forceReindex: false)
         } catch {
             NSApp.presentError(error)

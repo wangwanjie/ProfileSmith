@@ -3,6 +3,7 @@ import Cocoa
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var context: AppContext?
     private var mainWindowController: MainWindowController?
+    private var preferencesWindowController: PreferencesWindowController?
     private var statusItemController: StatusItemController?
     private var hasPresentedInitialWindow = false
     private let environment = ProcessInfo.processInfo.environment
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let mainWindowController = MainWindowController(context: context)
             self.mainWindowController = mainWindowController
+            preferencesWindowController = PreferencesWindowController(updateManager: context.updateManager)
 
             if !isUITesting {
                 let statusItemController = StatusItemController(
@@ -95,6 +97,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         context?.updateManager.checkForUpdates()
     }
 
+    @objc private func openPreferencesWindow(_ sender: Any?) {
+        preferencesWindowController?.showPreferencesWindow()
+    }
+
     @objc private func openQuickLookPluginManager(_ sender: Any?) {
         mainWindowController?.contentController.presentQuickLookPluginPanel(sender)
     }
@@ -148,6 +154,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: ""
             )
         )
+        let preferencesItem = NSMenuItem(title: "偏好设置…", action: #selector(openPreferencesWindow(_:)), keyEquivalent: ",")
+        preferencesItem.target = self
+        appMenu.addItem(preferencesItem)
         let updateItem = NSMenuItem(title: "检查更新…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
         updateItem.target = self
         appMenu.addItem(updateItem)

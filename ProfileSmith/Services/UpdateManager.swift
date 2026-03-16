@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 
 #if canImport(Sparkle)
@@ -51,13 +52,22 @@ struct GitHubRelease: Decodable {
 
 @MainActor
 final class UpdateManager: NSObject {
-    static let shared = UpdateManager()
+    private let lastUpdateCheckKey = "ProfileSmithLastUpdateCheckDate"
+    private let settings: AppSettings
+    private var cancellables = Set<AnyCancellable>()
 
     #if canImport(Sparkle)
     private var sparkleUpdaterController: SPUStandardUpdaterController?
     #endif
 
+    init(settings: AppSettings? = nil) {
+        self.settings = settings ?? AppSettings.shared
+        super.init()
+    }
+
     func configure() {
+        observeSettingsIfNeeded()
+
         #if canImport(Sparkle)
         guard sparkleUpdaterController == nil, isSparkleConfigured else { return }
         sparkleUpdaterController = SPUStandardUpdaterController(
@@ -65,13 +75,38 @@ final class UpdateManager: NSObject {
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+        applySparkleSettings()
         #endif
     }
 
     func scheduleBackgroundUpdateCheck() {
-        #if canImport(Sparkle)
-        sparkleUpdaterController?.updater.checkForUpdatesInBackground()
-        #endif
+        switch settings.updateCheckStrategy {
+        case .manual:
+            return
+        case .daily:
+            #if canImport(Sparkle)
+            if sparkleUpdaterController != nil {
+                return
+            }
+            #endif
+
+            let interval: TimeInterval = 24 * 60 * 60
+            if let lastCheckDate = UserDefaults.standard.object(forKey: lastUpdateCheckKey) as? Date,
+               Date().timeIntervalSince(lastCheckDate) < interval {
+                return
+            }
+        case .onLaunch:
+            #if canImport(Sparkle)
+            if let sparkleUpdaterController {
+                sparkleUpdaterController.updater.checkForUpdatesInBackground()
+                return
+            }
+            #endif
+        }
+
+        Task { [weak self] in
+            await self?.checkLatestGitHubRelease(interactive: false)
+        }
     }
 
     func checkForUpdates() {
@@ -84,6 +119,30 @@ final class UpdateManager: NSObject {
 
         Task {
             await checkLatestGitHubRelease(interactive: true)
+        }
+    }
+
+    var supportsAutomaticUpdateDownloads: Bool {
+        #if canImport(Sparkle)
+        guard let updater = sparkleUpdaterController?.updater else { return false }
+        return updater.allowsAutomaticUpdates
+        #else
+        return false
+        #endif
+    }
+
+    var automaticallyDownloadsUpdates: Bool {
+        get {
+            #if canImport(Sparkle)
+            return sparkleUpdaterController?.updater.automaticallyDownloadsUpdates ?? false
+            #else
+            return false
+            #endif
+        }
+        set {
+            #if canImport(Sparkle)
+            sparkleUpdaterController?.updater.automaticallyDownloadsUpdates = newValue
+            #endif
         }
     }
 
@@ -116,10 +175,42 @@ final class UpdateManager: NSObject {
         let publicKey = (Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return !feedURL.isEmpty && !publicKey.isEmpty
     }
+
+    private func applySparkleSettings() {
+        guard let updater = sparkleUpdaterController?.updater else { return }
+
+        switch settings.updateCheckStrategy {
+        case .manual:
+            updater.automaticallyChecksForUpdates = false
+        case .daily:
+            updater.updateCheckInterval = 24 * 60 * 60
+            updater.automaticallyChecksForUpdates = true
+        case .onLaunch:
+            updater.automaticallyChecksForUpdates = false
+        }
+    }
     #endif
 
+    private func observeSettingsIfNeeded() {
+        guard cancellables.isEmpty else { return }
+
+        settings.$updateCheckStrategy
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                #if canImport(Sparkle)
+                self?.applySparkleSettings()
+                #endif
+            }
+            .store(in: &cancellables)
+    }
+
     private func checkLatestGitHubRelease(interactive: Bool) async {
-        guard let latestReleaseAPIURL else { return }
+        guard let latestReleaseAPIURL else {
+            if interactive {
+                presentFailureAlert(message: "未配置 GitHub Releases 更新地址。")
+            }
+            return
+        }
 
         do {
             var request = URLRequest(url: latestReleaseAPIURL)
@@ -132,13 +223,11 @@ final class UpdateManager: NSObject {
             }
 
             let release = try JSONDecoder().decode(GitHubRelease.self, from: data)
+            UserDefaults.standard.set(Date(), forKey: lastUpdateCheckKey)
             presentReleaseResult(release, interactive: interactive)
         } catch {
             if interactive {
-                let alert = NSAlert()
-                alert.messageText = "检查更新失败"
-                alert.informativeText = error.localizedDescription
-                alert.runModal()
+                presentFailureAlert(message: error.localizedDescription)
             }
         }
     }
@@ -165,6 +254,16 @@ final class UpdateManager: NSObject {
         if alert.runModal() == .alertFirstButtonReturn {
             NSWorkspace.shared.open(release.htmlURL)
         }
+    }
+
+    private func presentFailureAlert(message: String) {
+        let alert = NSAlert()
+        alert.messageText = "检查更新失败"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "确定")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 }
 

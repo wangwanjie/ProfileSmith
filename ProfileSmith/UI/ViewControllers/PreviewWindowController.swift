@@ -1,17 +1,24 @@
 import Cocoa
 import SnapKit
 
-final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate {
+private struct PreviewOverviewRow {
+    let key: String
+    let value: String
+}
+
+final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate {
     private let inspection: PreviewInspection
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let segmentedControl = NSSegmentedControl(labels: ["总览", "描述文件", "Info.plist"], trackingMode: .selectOne, target: nil, action: nil)
     private let tabView = NSTabView()
-    private let previewContentView = HTMLPreviewView()
+    private let overviewTableView = NSTableView()
+    private let overviewScrollView = NSScrollView()
     private let profileOutlineView = NSOutlineView()
     private let profileOutlineScrollView = NSScrollView()
     private let infoOutlineView = NSOutlineView()
     private let infoOutlineScrollView = NSScrollView()
+    private var overviewRows: [PreviewOverviewRow] = []
     private var profileRootNode: InspectorNode?
     private var infoRootNode: InspectorNode?
 
@@ -57,8 +64,13 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
 
         tabView.tabViewType = .noTabsNoBorder
 
+        configureOverviewTableView()
         configureOutlineView(profileOutlineView)
         configureOutlineView(infoOutlineView)
+
+        overviewScrollView.documentView = overviewTableView
+        overviewScrollView.hasVerticalScroller = true
+        overviewScrollView.borderType = .bezelBorder
 
         profileOutlineScrollView.documentView = profileOutlineView
         profileOutlineScrollView.hasVerticalScroller = true
@@ -81,7 +93,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         }
 
         let overviewTab = NSTabViewItem(identifier: "overview")
-        overviewTab.view = previewContentView
+        overviewTab.view = overviewScrollView
         let profileTab = NSTabViewItem(identifier: "profile")
         profileTab.view = detailContainer
         let infoTab = NSTabViewItem(identifier: "info")
@@ -121,7 +133,8 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
     private func configure() {
         titleLabel.stringValue = inspection.title
         subtitleLabel.stringValue = inspection.sourceURL.path
-        previewContentView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
+        overviewRows = makeOverviewRows()
+        overviewTableView.reloadData()
         profileRootNode = inspection.parsedProfile.map {
             InspectorNodeBuilder.makeRootNode(from: $0.plist, certificates: $0.certificates)
         }
@@ -146,10 +159,54 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
     private func updateOutlineForSelectedSegment() {
         let selectedSegment = segmentedControl.selectedSegment
         tabView.selectTabViewItem(at: max(0, selectedSegment))
+        overviewTableView.reloadData()
         profileOutlineView.reloadData()
         infoOutlineView.reloadData()
         profileOutlineView.expandItem(nil, expandChildren: true)
         infoOutlineView.expandItem(nil, expandChildren: true)
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        if tableView === overviewTableView {
+            return overviewRows.count
+        }
+        return 0
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard tableView === overviewTableView,
+              let tableColumn,
+              overviewRows.indices.contains(row)
+        else { return nil }
+
+        let rowModel = overviewRows[row]
+        let identifier = NSUserInterfaceItemIdentifier("PreviewOverviewCell.\(tableColumn.identifier.rawValue)")
+        let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView ?? {
+            let cell = NSTableCellView()
+            let textField = NSTextField(labelWithString: "")
+            textField.lineBreakMode = .byTruncatingMiddle
+            textField.maximumNumberOfLines = 1
+            cell.addSubview(textField)
+            textField.snp.makeConstraints { make in
+                make.leading.trailing.equalToSuperview().inset(6)
+                make.centerY.equalToSuperview()
+            }
+            cell.textField = textField
+            cell.identifier = identifier
+            return cell
+        }()
+
+        if tableColumn.identifier.rawValue == "overviewKey" {
+            cell.textField?.stringValue = rowModel.key
+            cell.textField?.font = .systemFont(ofSize: 12, weight: .medium)
+            cell.textField?.textColor = .labelColor
+        } else {
+            cell.textField?.stringValue = rowModel.value
+            cell.textField?.font = .systemFont(ofSize: 12)
+            cell.textField?.textColor = .secondaryLabelColor
+        }
+
+        return cell
     }
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
@@ -206,6 +263,25 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         return cell
     }
 
+    private func configureOverviewTableView() {
+        overviewTableView.headerView = nil
+        overviewTableView.usesAlternatingRowBackgroundColors = false
+        overviewTableView.selectionHighlightStyle = .none
+        overviewTableView.rowHeight = 30
+        overviewTableView.dataSource = self
+        overviewTableView.delegate = self
+
+        let keyColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("overviewKey"))
+        keyColumn.width = 180
+        keyColumn.minWidth = 120
+        let valueColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("overviewValue"))
+        valueColumn.width = 560
+        valueColumn.minWidth = 240
+
+        overviewTableView.addTableColumn(keyColumn)
+        overviewTableView.addTableColumn(valueColumn)
+    }
+
     private func configureOutlineView(_ outlineView: NSOutlineView) {
         outlineView.headerView = nil
         outlineView.usesAlternatingRowBackgroundColors = false
@@ -234,6 +310,54 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         }
         return infoRootNode
     }
+
+    private func makeOverviewRows() -> [PreviewOverviewRow] {
+        let record = inspection.parsedProfile?.record
+        let bundleIdentifier = record?.bundleIdentifier
+            ?? (inspection.infoPlist?["CFBundleIdentifier"] as? String)
+            ?? "-"
+        let teamName = record?.teamName ?? "-"
+        let typeName = record?.profileType ?? fallbackFileTypeDescription(for: inspection.sourceURL)
+        let platformName = record?.profilePlatform
+            ?? (inspection.infoPlist?["DTPlatformName"] as? String)
+            ?? "-"
+        let expiration = record?.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-"
+        let embeddedProfile = record?.displayName ?? "无嵌入描述文件"
+        let infoAvailability = inspection.infoPlist == nil ? "无" : "有"
+
+        return [
+            PreviewOverviewRow(key: "文件", value: inspection.sourceURL.lastPathComponent),
+            PreviewOverviewRow(key: "名称", value: inspection.title),
+            PreviewOverviewRow(key: "Bundle ID", value: bundleIdentifier),
+            PreviewOverviewRow(key: "团队", value: teamName),
+            PreviewOverviewRow(key: "类型", value: typeName),
+            PreviewOverviewRow(key: "平台", value: platformName),
+            PreviewOverviewRow(key: "到期", value: expiration),
+            PreviewOverviewRow(key: "证书", value: "\(record?.certificateCount ?? 0)"),
+            PreviewOverviewRow(key: "设备", value: "\(record?.deviceCount ?? 0)"),
+            PreviewOverviewRow(key: "描述文件", value: embeddedProfile),
+            PreviewOverviewRow(key: "Info.plist", value: infoAvailability),
+        ]
+    }
+
+    private func fallbackFileTypeDescription(for url: URL) -> String {
+        switch url.pathExtension.lowercased() {
+        case "ipa":
+            return "IPA"
+        case "xcarchive":
+            return "XCArchive"
+        case "app":
+            return "APP"
+        case "appex":
+            return "APPEX"
+        case "mobileprovision":
+            return "iOS Profile"
+        case "provisionprofile":
+            return "Mac Profile"
+        default:
+            return "文件"
+        }
+    }
 }
 
 #if DEBUG
@@ -241,7 +365,7 @@ extension PreviewWindowController {
     var debugSegmentedControl: NSSegmentedControl { segmentedControl }
     var debugProfileOutlineView: NSOutlineView { profileOutlineView }
     var debugInfoOutlineView: NSOutlineView { infoOutlineView }
-    var debugPreviewText: String { previewContentView.debugPlainText }
+    var debugOverviewRows: [String] { overviewRows.map { "\($0.key): \($0.value)" } }
     var debugTitleLabel: NSTextField { titleLabel }
 
     func debugSelectSegment(_ index: Int) {
@@ -321,6 +445,7 @@ final class HTMLPreviewView: NSView {
                 let pointSize = font.pointSize == 12 ? CGFloat(13) : font.pointSize
                 attributedString.addAttribute(.font, value: NSFont.systemFont(ofSize: pointSize), range: range)
             }
+            attributedString.removeAttribute(.backgroundColor, range: fullRange)
             return attributedString
         } catch {
             return NSAttributedString(string: html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
