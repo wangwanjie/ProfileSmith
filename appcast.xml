@@ -3,8 +3,28 @@
     <channel>
         <title>ProfileSmith</title>
         <item>
+            <title>1.2.2</title>
+            <pubDate>Mon, 16 Mar 2026 18:18:14 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.2.2</link>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.2.2
+
+- 修复右侧详情 pane 在启动阶段可能触发的 Auto Layout 冲突日志。
+- 修复 split view 稳定逻辑在布局过程中重复触发布局，消除控制台递归布局警告。
+- 继续保留 1.2.1 的冷启动刷新指示器修复，并补强对应回归测试。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.2.2/ProfileSmith_V_1.2.2.dmg" length="8903270" type="application/octet-stream" sparkle:edSignature="NSNqWnr7PW/kDQZs0s7te7XEMJ26HdvaBbkerv5+JvsuPfmSaKjN/Gi5KQA3EHA+Eye9cvMkqmHeD/2l8GChAQ==" />
+            <sparkle:deltas>
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith6-5.delta" sparkle:deltaFrom="5" length="534314" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="+PsD8YlJoMqwbHk8tBagAg1gDjJ9mt/AcAzUmsAZ01tw6yEWvYC4VvyQbJyhtFHRO7mG1LTb86ShiOJTldwTAQ==" />
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith6-3.delta" sparkle:deltaFrom="3" length="953354" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="veY8NzkHPiCng1eBLWi4DEUEO4/e7jFMPSxAxvPofJTIUGDssNwNE62yLdSmOHhG63Iu1J54aqE9lAvVh85VCg==" />
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith6-1.delta" sparkle:deltaFrom="1" length="1198102" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="goOxE1JtFHoMsTGq0Uto8BWIv1w8N+fZRIS+/c08lPXs7w5jGGvRvubZQvYOZGSUaXpzXu0bZF6JLNiVF7DcCw==" />
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>1.2.1</title>
-            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 18:18:14 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.2.1</link>
             <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
@@ -17,14 +37,10 @@
 - 修复应用冷启动后右上角刷新指示器可能持续转动、需要手动点击“刷新”才会消失的问题。
 </description>
             <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.2.1/ProfileSmith_V_1.2.1.dmg" length="8901767" type="application/octet-stream" sparkle:edSignature="bj+Ev+qRuyxzYWAF5jwBWqe9iutXqfdumLHucQzgci5LLW+2C6AFuXgABdiqZcGHLiauXwtrEIlv2jDqyV5vDA==" />
-            <sparkle:deltas>
-                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith5-3.delta" sparkle:deltaFrom="3" length="942866" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="ME0vQ8MRlDAbuhPyVzdtvslV0vyDejPjV6ZuBMfy0qZ263WzWfvxiYRkjFIGumQrbmnoI+5eXiOxoHiV6D+6Bw==" />
-                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith5-1.delta" sparkle:deltaFrom="1" length="1172918" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="uumjtKQ0cuYg99mYde2VtXG+k5n5KKnXuyAFiyTopRdnKbrQw94xvEU4pIbvlXEygprnVYChpgbiSsAYZmJ3Dw==" />
-            </sparkle:deltas>
         </item>
         <item>
             <title>1.1</title>
-            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 18:18:14 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.1</link>
             <sparkle:version>3</sparkle:version>
             <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
@@ -38,25 +54,6 @@
 - 补齐项目 README、测试覆盖与 1.1 发布资料。
 </description>
             <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.1/ProfileSmith_V_1.1.dmg" length="8795910" type="application/octet-stream" sparkle:edSignature="vUiXAlcvXeu2/mZaKepspFLm7HLJlLPbcK4q36JuBkcRM1Z5GZK+Sc0OLEuQ2mmBJ+pMzJAU8GUf0AoXkVByDg==" />
-        </item>
-        <item>
-            <title>1.0</title>
-            <pubDate>Mon, 16 Mar 2026 17:23:28 +0800</pubDate>
-            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.0</link>
-            <sparkle:version>1</sparkle:version>
-            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"># ProfileSmith 1.0
-
-- Built a new macOS provisioning profile manager from the ground up in Swift.
-- Indexed profiles with SQLite + GRDB for fast search, filtering, and sorting at scale.
-- Added archive and bundle inspection for apps, IPAs, XCArchives, and extensions.
-- Included Quick Look integration, drag and drop import, safe export, and filename beautification.
-- Added a status bar menu and Sparkle-based update support.
-- Covered parser, database, scanner, file operations, and UI controller behavior with automated tests.
-
-</description>
-            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.0/ProfileSmith_V_1.0.dmg" length="8565985" type="application/octet-stream" sparkle:edSignature="zG8IXVjMOC7ZHHnh4eVuy7q0VirnXkwoyJPSR7T7UD4KheRAuCEVVL/WTou8BEfIiPS3QfK3qDQUYtYME84+DA==" />
         </item>
         <link>https://github.com/wangwanjie/ProfileSmith</link>
         <description>ProfileSmith release feed.</description>
