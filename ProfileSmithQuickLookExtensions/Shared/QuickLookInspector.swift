@@ -28,13 +28,19 @@ enum QuickLookInspectionError: LocalizedError {
 private struct ParsedProfileDetails {
     let title: String
     let bundleIdentifier: String?
+    let appIDName: String?
     let teamName: String?
+    let teamIdentifier: String?
     let profileType: String
     let platform: String
+    let uuid: String?
+    let creationDate: Date?
     let expirationDate: Date?
+    let applicationIdentifier: String?
     let certificateCount: Int
     let deviceCount: Int
-    let certificateDigests: [String]
+    let entitlements: [(key: String, value: String)]
+    let certificates: [(summary: String, digest: String)]
 }
 
 final class ProfileSmithQuickLookInspector {
@@ -48,14 +54,20 @@ final class ProfileSmithQuickLookInspector {
                 fileKind: fileKind,
                 title: profile.title,
                 bundleIdentifier: profile.bundleIdentifier,
+                appIDName: profile.appIDName,
                 teamName: profile.teamName,
+                teamIdentifier: profile.teamIdentifier,
                 profileType: profile.profileType,
                 platform: profile.platform,
+                uuid: profile.uuid,
+                creationDate: profile.creationDate,
                 expirationDate: profile.expirationDate,
+                applicationIdentifier: profile.applicationIdentifier,
                 certificateCount: profile.certificateCount,
                 deviceCount: profile.deviceCount,
+                entitlements: profile.entitlements,
                 infoPlist: nil,
-                certificateDigests: profile.certificateDigests
+                certificates: profile.certificates
             )
         case .ipa:
             return try inspectIPA(at: url)
@@ -103,14 +115,20 @@ final class ProfileSmithQuickLookInspector {
                 fileKind: fileKind,
                 title: title,
                 bundleIdentifier: profile.bundleIdentifier ?? (infoPlist?["CFBundleIdentifier"] as? String),
+                appIDName: profile.appIDName,
                 teamName: profile.teamName,
+                teamIdentifier: profile.teamIdentifier,
                 profileType: profile.profileType,
                 platform: profile.platform,
+                uuid: profile.uuid,
+                creationDate: profile.creationDate,
                 expirationDate: profile.expirationDate,
+                applicationIdentifier: profile.applicationIdentifier,
                 certificateCount: profile.certificateCount,
                 deviceCount: profile.deviceCount,
+                entitlements: profile.entitlements,
                 infoPlist: infoPlist,
-                certificateDigests: profile.certificateDigests
+                certificates: profile.certificates
             )
         }
 
@@ -119,14 +137,20 @@ final class ProfileSmithQuickLookInspector {
             fileKind: fileKind,
             title: title,
             bundleIdentifier: infoPlist?["CFBundleIdentifier"] as? String,
+            appIDName: nil,
             teamName: nil,
+            teamIdentifier: nil,
             profileType: fileKind.badgeText,
             platform: infoPlist?["DTPlatformName"] as? String,
+            uuid: nil,
+            creationDate: nil,
             expirationDate: nil,
+            applicationIdentifier: nil,
             certificateCount: 0,
             deviceCount: 0,
+            entitlements: [],
             infoPlist: infoPlist,
-            certificateDigests: []
+            certificates: []
         )
     }
 
@@ -158,20 +182,33 @@ final class ProfileSmithQuickLookInspector {
             throw QuickLookInspectionError.malformedPropertyList(url)
         }
 
-        let certificateDigests = (plist["DeveloperCertificates"] as? [Data] ?? []).map(Self.digestString(for:))
+        let certificateData = plist["DeveloperCertificates"] as? [Data] ?? []
+        let certificates = certificateData.map {
+            (
+                summary: Self.certificateSummary(for: $0),
+                digest: Self.digestString(for: $0)
+            )
+        }
+        let entitlements = plist["Entitlements"] as? [String: Any] ?? [:]
         let applicationIdentifier = (plist["Entitlements"] as? [String: Any])?["application-identifier"] as? String
         let applicationIdentifierPrefix = (plist["ApplicationIdentifierPrefix"] as? [String])?.first
 
         return ParsedProfileDetails(
             title: plist["Name"] as? String ?? url.deletingPathExtension().lastPathComponent,
             bundleIdentifier: Self.bundleIdentifier(applicationIdentifier: applicationIdentifier, prefix: applicationIdentifierPrefix),
+            appIDName: plist["AppIDName"] as? String,
             teamName: plist["TeamName"] as? String,
+            teamIdentifier: (plist["TeamIdentifier"] as? [String])?.first,
             profileType: Self.profileType(from: plist, fileExtension: url.pathExtension.lowercased()),
             platform: Self.profilePlatform(from: plist, fileExtension: url.pathExtension.lowercased()),
+            uuid: plist["UUID"] as? String,
+            creationDate: plist["CreationDate"] as? Date,
             expirationDate: plist["ExpirationDate"] as? Date,
-            certificateCount: certificateDigests.count,
+            applicationIdentifier: applicationIdentifier,
+            certificateCount: certificates.count,
             deviceCount: (plist["ProvisionedDevices"] as? [String])?.count ?? 0,
-            certificateDigests: certificateDigests
+            entitlements: Self.entitlementRows(from: entitlements),
+            certificates: certificates
         )
     }
 
@@ -231,6 +268,19 @@ final class ProfileSmithQuickLookInspector {
             _ = CC_SHA1(rawBuffer.baseAddress, CC_LONG(data.count), &digest)
         }
         return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func certificateSummary(for data: Data) -> String {
+        guard let certificate = SecCertificateCreateWithData(nil, data as CFData) else {
+            return "Certificate"
+        }
+        return SecCertificateCopySubjectSummary(certificate) as String? ?? "Certificate"
+    }
+
+    private static func entitlementRows(from entitlements: [String: Any]) -> [(key: String, value: String)] {
+        entitlements.keys.sorted().map { key in
+            (key: key, value: String(describing: entitlements[key] ?? ""))
+        }
     }
 
     private func run(executable: String, arguments: [String]) throws {

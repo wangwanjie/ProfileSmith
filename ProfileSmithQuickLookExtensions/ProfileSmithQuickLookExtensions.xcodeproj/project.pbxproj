@@ -249,7 +249,7 @@
 				CODE_SIGN_ENTITLEMENTS = Thumbnail/ProfileSmithQuickLookThumbnail.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -257,7 +257,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Thumbnail/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.vanjay.ProfileSmith.QuickLookThumbnail;
 				PRODUCT_NAME = ProfileSmithQuickLookThumbnail;
 				SDKROOT = macosx;
@@ -336,7 +336,7 @@
 				CODE_SIGN_ENTITLEMENTS = Preview/ProfileSmithQuickLookPreview.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -344,7 +344,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Preview/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.vanjay.ProfileSmith.QuickLookPreview;
 				PRODUCT_NAME = ProfileSmithQuickLookPreview;
 				SDKROOT = macosx;
@@ -416,7 +416,7 @@
 				CODE_SIGN_ENTITLEMENTS = Preview/ProfileSmithQuickLookPreview.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -424,7 +424,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Preview/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.vanjay.ProfileSmith.QuickLookPreview;
 				PRODUCT_NAME = ProfileSmithQuickLookPreview;
 				SDKROOT = macosx;
@@ -442,7 +442,7 @@
 				CODE_SIGN_ENTITLEMENTS = Thumbnail/ProfileSmithQuickLookThumbnail.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEVELOPMENT_TEAM = X6B6C6U6QV;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -450,7 +450,7 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Thumbnail/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 10.15;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.vanjay.ProfileSmith.QuickLookThumbnail;
 				PRODUCT_NAME = ProfileSmithQuickLookThumbnail;
 				SDKROOT = macosx;

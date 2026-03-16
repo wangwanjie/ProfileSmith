@@ -9,8 +9,20 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 - 详情面板展示概要、Entitlements、证书摘要和原始 plist 结构
 - 支持导入、导出、Finder 定位、移到废纸篓、彻底删除、文件名美化
 - 已声明描述文件文档类型，可在 Finder 中通过“打开方式”使用 ProfileSmith 打开 `.mobileprovision` / `.provisionprofile`
-- 内建 Finder Quick Look 扩展，可预览描述文件、IPA、XCArchive、App、App Extension
+- 内建 Finder Quick Look 扩展，使用原生 AppKit 预览描述文件、IPA、XCArchive、App、App Extension
 - 集成 Sparkle / GitHub Releases 更新检查，并可在偏好设置里配置检查策略
+
+## 截图
+
+<p>
+  <img src="snapshots/1.png" alt="主界面预览页" width="100%" />
+</p>
+<p>
+  <img src="snapshots/2.png" alt="主界面详情与右键菜单" width="100%" />
+</p>
+<p>
+  <img src="snapshots/3.png" alt="独立预览窗口" width="720" />
+</p>
 
 ## 工程结构
 
@@ -49,7 +61,7 @@ xcodebuild test \
 ## 使用说明
 
 1. 启动后左侧会自动显示已索引的描述文件。
-2. 选中单个条目后，右侧可以查看概要、原始结构和 HTML 预览。
+2. 选中单个条目后，右侧可以查看概要、原始结构和内建预览。
 3. 拖入 `.mobileprovision` / `.provisionprofile` 会执行导入。
 4. 拖入 `.ipa` / `.xcarchive` / `.app` / `.appex` 会打开预览窗口。
 5. 通过“偏好设置…”可以切换更新策略：手动检查、每天自动检查、启动时检查。
@@ -75,6 +87,11 @@ xcodebuild test \
 3. 构建并签名 DMG
 4. 发布 GitHub Release
 5. 生成并提交 `appcast.xml`
+
+## 1.2.1 更新
+
+- Finder Quick Look 预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView
+- README 新增最新主界面与预览窗口截图
 
 ## 1.2 更新
 

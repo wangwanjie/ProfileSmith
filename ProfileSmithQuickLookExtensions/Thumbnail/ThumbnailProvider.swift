@@ -10,14 +10,20 @@ final class ThumbnailProvider: QLThumbnailProvider {
             fileKind: QuickLookFileKind(url: request.fileURL),
             title: request.fileURL.deletingPathExtension().lastPathComponent,
             bundleIdentifier: nil,
+            appIDName: nil,
             teamName: nil,
+            teamIdentifier: nil,
             profileType: nil,
             platform: nil,
+            uuid: nil,
+            creationDate: nil,
             expirationDate: nil,
+            applicationIdentifier: nil,
             certificateCount: 0,
             deviceCount: 0,
+            entitlements: [],
             infoPlist: nil,
-            certificateDigests: []
+            certificates: []
         )
 
         let reply = QLThumbnailReply(contextSize: request.maximumSize, drawing: { context in
@@ -39,12 +45,12 @@ final class ThumbnailProvider: QLThumbnailProvider {
 
         let outerRect = bounds.insetBy(dx: max(8, size.width * 0.04), dy: max(8, size.height * 0.04))
         let cardPath = NSBezierPath(roundedRect: outerRect, xRadius: 24, yRadius: 24)
-        Self.color(hex: inspection.fileKind.tintHex).setFill()
+        inspection.fileKind.tintColor.setFill()
         cardPath.fill()
 
         let stripeRect = CGRect(x: outerRect.minX, y: outerRect.minY, width: outerRect.width, height: max(44, outerRect.height * 0.24))
         let stripePath = NSBezierPath(roundedRect: stripeRect, xRadius: 24, yRadius: 24)
-        Self.color(hex: inspection.fileKind.accentHex).setFill()
+        inspection.fileKind.accentColor.setFill()
         stripePath.fill()
 
         NSColor.white.setFill()
@@ -95,18 +101,5 @@ final class ThumbnailProvider: QLThumbnailProvider {
         }
 
         return true
-    }
-
-    private static func color(hex: String) -> NSColor {
-        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        let scanner = Scanner(string: cleaned)
-        var value: UInt64 = 0
-        scanner.scanHexInt64(&value)
-        return NSColor(
-            calibratedRed: CGFloat((value >> 16) & 0xFF) / 255,
-            green: CGFloat((value >> 8) & 0xFF) / 255,
-            blue: CGFloat(value & 0xFF) / 255,
-            alpha: 1
-        )
     }
 }

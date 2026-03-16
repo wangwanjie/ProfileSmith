@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
 enum QuickLookFileKind: String {
     case mobileProvision
@@ -91,171 +94,94 @@ struct QuickLookInspection {
     let fileKind: QuickLookFileKind
     let title: String
     let bundleIdentifier: String?
+    let appIDName: String?
     let teamName: String?
+    let teamIdentifier: String?
     let profileType: String?
     let platform: String?
+    let uuid: String?
+    let creationDate: Date?
     let expirationDate: Date?
+    let applicationIdentifier: String?
     let certificateCount: Int
     let deviceCount: Int
+    let entitlements: [(key: String, value: String)]
     let infoPlist: [String: Any]?
-    let certificateDigests: [String]
+    let certificates: [(summary: String, digest: String)]
 
-    func html() -> String {
-        let summaryRows: [(String, String)] = [
-            ("文件", fileURL.lastPathComponent),
-            ("名称", title),
-            ("Bundle ID", bundleIdentifier ?? "-"),
-            ("团队", teamName ?? "-"),
-            ("类型", profileType ?? fileKind.badgeText),
-            ("平台", platform ?? "-"),
-            ("到期", expirationDate.map(QuickLookFormatters.timestampString(from:)) ?? "-"),
-            ("证书", "\(certificateCount)"),
-            ("设备", "\(deviceCount)"),
+    var statusText: String {
+        guard let expirationDate else { return "无到期时间" }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: expirationDate).day ?? 0
+        if days < 0 {
+            return "已过期"
+        }
+        if days == 0 {
+            return "今天到期"
+        }
+        if days <= 30 {
+            return "\(days) 天内到期"
+        }
+        return "有效"
+    }
+
+    var summaryRows: [QuickLookFieldRow] {
+        [
+            QuickLookFieldRow(title: "文件", value: fileURL.lastPathComponent),
+            QuickLookFieldRow(title: "名称", value: title),
+            QuickLookFieldRow(title: "Bundle ID", value: bundleIdentifier ?? "-", isCode: true),
+            QuickLookFieldRow(title: "App ID Name", value: appIDName ?? "-"),
+            QuickLookFieldRow(title: "团队", value: teamName ?? "-"),
+            QuickLookFieldRow(title: "Team ID", value: teamIdentifier ?? "-", isCode: true),
+            QuickLookFieldRow(title: "类型", value: profileType ?? fileKind.badgeText),
+            QuickLookFieldRow(title: "平台", value: platform ?? "-"),
+            QuickLookFieldRow(title: "UUID", value: uuid ?? "-", isCode: true),
+            QuickLookFieldRow(title: "创建", value: creationDate.map(QuickLookFormatters.timestampString(from:)) ?? "-"),
+            QuickLookFieldRow(title: "到期", value: expirationDate.map(QuickLookFormatters.timestampString(from:)) ?? "-"),
+            QuickLookFieldRow(title: "Application ID", value: applicationIdentifier ?? "-", isCode: true),
+            QuickLookFieldRow(title: "证书", value: "\(certificateCount)"),
+            QuickLookFieldRow(title: "设备", value: "\(deviceCount)"),
         ]
+    }
 
-        let detailsHTML = summaryRows.map { key, value in
-            "<tr><th>\(escapeHTML(key))</th><td>\(escapeHTML(value))</td></tr>"
-        }.joined()
+    var entitlementRows: [QuickLookFieldRow] {
+        entitlements.map { QuickLookFieldRow(title: $0.key, value: $0.value, isCode: true) }
+    }
 
-        let infoRowsHTML = (infoPlist ?? [:]).keys.sorted().prefix(20).map { key in
-            let value = infoPlist?[key].map { String(describing: $0) } ?? ""
-            return "<tr><th>\(escapeHTML(key))</th><td>\(escapeHTML(value))</td></tr>"
-        }.joined()
+    var infoRows: [QuickLookFieldRow] {
+        (infoPlist ?? [:]).keys.sorted().prefix(24).map { key in
+            QuickLookFieldRow(
+                title: key,
+                value: infoPlist?[key].map { String(describing: $0) } ?? "",
+                isCode: true
+            )
+        }
+    }
 
-        let certificatesHTML = certificateDigests.map { digest in
-            "<li><code>\(escapeHTML(digest))</code></li>"
-        }.joined()
+    var certificateRows: [QuickLookFieldRow] {
+        certificates.map { QuickLookFieldRow(title: $0.summary, value: $0.digest, isCode: true) }
+    }
 
-        return """
-        <!doctype html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-        :root {
-            --accent: \(fileKind.accentHex);
-            --tint: \(fileKind.tintHex);
-            --ink: #122033;
-            --muted: #55667d;
-            --line: #d9e2ec;
-            --card: rgba(255, 255, 255, 0.94);
+    var headerDescription: String {
+        switch fileKind {
+        case .mobileProvision, .provisionProfile:
+            return "展示描述文件核心元数据、Entitlements 和证书摘要。"
+        case .ipa, .xcarchive, .appExtension, .application:
+            return "优先展示嵌入描述文件，补充可解析的 Info.plist 与签名信息。"
+        case .unknown:
+            return "当前文件类型无法识别更多结构化信息。"
         }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            padding: 28px;
-            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
-            color: var(--ink);
-            background:
-                radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 36%),
-                linear-gradient(180deg, #f6f9fc 0%, #edf3f8 100%);
-        }
-        .hero {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 20px;
-        }
-        .badge {
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: var(--tint);
-            color: var(--accent);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-        h1 {
-            margin: 0;
-            font-size: 30px;
-            line-height: 1.12;
-        }
-        .subtitle {
-            margin-top: 8px;
-            color: var(--muted);
-            font-size: 14px;
-        }
-        .grid {
-            display: grid;
-            gap: 18px;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        }
-        .card {
-            background: var(--card);
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            box-shadow: 0 18px 46px rgba(23, 37, 63, 0.08);
-            overflow: hidden;
-        }
-        .card h2 {
-            margin: 0;
-            padding: 16px 18px 8px;
-            font-size: 18px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th, td {
-            padding: 10px 18px;
-            font-size: 13px;
-            line-height: 1.45;
-            text-align: left;
-            vertical-align: top;
-            border-top: 1px solid #edf2f7;
-        }
-        th {
-            width: 128px;
-            color: var(--muted);
-            font-weight: 600;
-        }
-        ul {
-            margin: 0;
-            padding: 0 18px 18px 34px;
-        }
-        li {
-            margin: 0 0 8px;
-            color: var(--ink);
-        }
-        code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 12px;
-            word-break: break-all;
-        }
-        .empty {
-            padding: 18px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-        </style>
-        </head>
-        <body>
-            <div class="hero">
-                <div class="badge">\(escapeHTML(fileKind.badgeText))</div>
-                <div>
-                    <h1>\(escapeHTML(title))</h1>
-                    <div class="subtitle">\(escapeHTML(fileURL.lastPathComponent))</div>
-                </div>
-            </div>
-            <div class="grid">
-                <section class="card">
-                    <h2>概要</h2>
-                    <table>\(detailsHTML)</table>
-                </section>
-                <section class="card">
-                    <h2>Info.plist</h2>
-                    \(infoRowsHTML.isEmpty ? "<div class=\"empty\">没有可显示的 Info.plist 数据</div>" : "<table>\(infoRowsHTML)</table>")
-                </section>
-                <section class="card">
-                    <h2>证书摘要</h2>
-                    \(certificatesHTML.isEmpty ? "<div class=\"empty\">没有证书摘要</div>" : "<ul>\(certificatesHTML)</ul>")
-                </section>
-            </div>
-        </body>
-        </html>
-        """
+    }
+}
+
+struct QuickLookFieldRow {
+    let title: String
+    let value: String
+    let isCode: Bool
+
+    init(title: String, value: String, isCode: Bool = false) {
+        self.title = title
+        self.value = value
+        self.isCode = isCode
     }
 }
 
@@ -272,11 +198,29 @@ enum QuickLookFormatters {
     }
 }
 
-func escapeHTML(_ value: String) -> String {
-    value
-        .replacingOccurrences(of: "&", with: "&amp;")
-        .replacingOccurrences(of: "<", with: "&lt;")
-        .replacingOccurrences(of: ">", with: "&gt;")
-        .replacingOccurrences(of: "\"", with: "&quot;")
-        .replacingOccurrences(of: "'", with: "&#39;")
+#if canImport(AppKit)
+extension QuickLookFileKind {
+    var accentColor: NSColor {
+        NSColor.quickLookColor(hex: accentHex)
+    }
+
+    var tintColor: NSColor {
+        NSColor.quickLookColor(hex: tintHex)
+    }
 }
+
+private extension NSColor {
+    static func quickLookColor(hex: String) -> NSColor {
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        let scanner = Scanner(string: cleaned)
+        var value: UInt64 = 0
+        scanner.scanHexInt64(&value)
+        return NSColor(
+            calibratedRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+#endif
