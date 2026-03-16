@@ -3,8 +3,28 @@
     <channel>
         <title>ProfileSmith</title>
         <item>
+            <title>1.1</title>
+            <pubDate>Mon, 16 Mar 2026 11:38:40 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.1</link>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.1
+
+- 修复单个描述文件执行“美化文件名”后详情面板仍引用旧路径、需要手动刷新才能恢复的问题。
+- 优化索引刷新队列，文件变更期间触发的刷新不会再被后台扫描吞掉。
+- 重做快速预览窗口“总览”页，改为原生 AppKit 总览表格，样式与“描述文件”tab 对齐。
+- 新增“偏好设置”窗口，可配置更新检查策略，并在 Sparkle 可用时控制自动下载更新。
+- 补齐项目 README、测试覆盖与 1.1 发布资料。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.1/ProfileSmith_V_1.1.dmg" length="8795910" type="application/octet-stream" sparkle:edSignature="vUiXAlcvXeu2/mZaKepspFLm7HLJlLPbcK4q36JuBkcRM1Z5GZK+Sc0OLEuQ2mmBJ+pMzJAU8GUf0AoXkVByDg==" />
+            <sparkle:deltas>
+                <enclosure url="https://raw.githubusercontent.com/wangwanjie/ProfileSmith/main/ProfileSmith3-1.delta" sparkle:deltaFrom="1" length="1086114" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977808" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="tER0/N8J/M5oM89QAdtSAnjvL70mS7PyPEl7HKkmenKeB0FGs0I4GjCpu/TyZxLci+mba3/T62tb0dE2z1+YBQ==" />
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>1.0</title>
-            <pubDate>Mon, 16 Mar 2026 02:55:19 +0800</pubDate>
+            <pubDate>Mon, 16 Mar 2026 11:38:40 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.0</link>
             <sparkle:version>1</sparkle:version>
             <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
