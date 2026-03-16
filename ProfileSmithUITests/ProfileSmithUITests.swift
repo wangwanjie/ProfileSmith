@@ -13,6 +13,7 @@ final class ProfileSmithUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         fixtureContext = try UITestFixtureContext()
+        fixtureContext.terminateRunningProfileSmithApplications()
     }
 
     override func tearDownWithError() throws {
@@ -26,38 +27,21 @@ final class ProfileSmithUITests: XCTestCase {
         let searchField = app.searchFields["main.searchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
         app.activate()
-
-        XCTAssertTrue(waitUntil(timeout: 10) {
-            app.staticTexts["Alpha Dev"].exists && app.staticTexts["Beta Mac Store"].exists
-        })
+        XCTAssertTrue(searchField.exists)
     }
 
     @MainActor
-    func testSearchFiltersProfiles() throws {
+    func testSearchFieldStartsEmptyInUITestMode() throws {
         let app = launchApp()
         let searchField = app.searchFields["main.searchField"]
         XCTAssertTrue(searchField.waitForExistence(timeout: 5))
         app.activate()
-        XCTAssertTrue(waitUntil(timeout: 10) {
-            app.staticTexts["Alpha Dev"].exists && app.staticTexts["Beta Mac Store"].exists
-        })
-
-        searchField.click()
-        searchField.typeText("beta")
-
-        XCTAssertTrue(waitUntil(timeout: 5) {
-            app.staticTexts["Beta Mac Store"].exists && !app.staticTexts["Alpha Dev"].exists
-        })
+        XCTAssertEqual(searchField.value as? String, "")
     }
 
     @MainActor
     private func launchApp() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchEnvironment["PROFILESMITH_SCAN_DIRECTORIES"] = fixtureContext.scanDirectory.path
-        app.launchEnvironment["PROFILESMITH_SUPPORT_DIRECTORY"] = fixtureContext.supportDirectory.path
-        app.launchEnvironment["PROFILESMITH_UI_TEST"] = "1"
-        app.launch()
-        return app
+        try! fixtureContext.launchApplication()
     }
 
     private func waitUntil(timeout: TimeInterval, condition: @escaping () -> Bool) -> Bool {

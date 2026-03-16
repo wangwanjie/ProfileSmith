@@ -1,6 +1,5 @@
 import Cocoa
 import SnapKit
-import WebKit
 
 final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate {
     private let inspection: PreviewInspection
@@ -8,7 +7,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let segmentedControl = NSSegmentedControl(labels: ["总览", "描述文件", "Info.plist"], trackingMode: .selectOne, target: nil, action: nil)
     private let tabView = NSTabView()
-    private let webView = WKWebView(frame: .zero)
+    private let previewContentView = HTMLPreviewView()
     private let profileOutlineView = NSOutlineView()
     private let profileOutlineScrollView = NSScrollView()
     private let infoOutlineView = NSOutlineView()
@@ -58,12 +57,6 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
 
         tabView.tabViewType = .noTabsNoBorder
 
-        let webContainer = NSView()
-        webContainer.addSubview(webView)
-        webView.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
-
         configureOutlineView(profileOutlineView)
         configureOutlineView(infoOutlineView)
 
@@ -88,7 +81,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         }
 
         let overviewTab = NSTabViewItem(identifier: "overview")
-        overviewTab.view = webContainer
+        overviewTab.view = previewContentView
         let profileTab = NSTabViewItem(identifier: "profile")
         profileTab.view = detailContainer
         let infoTab = NSTabViewItem(identifier: "info")
@@ -128,7 +121,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
     private func configure() {
         titleLabel.stringValue = inspection.title
         subtitleLabel.stringValue = inspection.sourceURL.path
-        webView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
+        previewContentView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
         profileRootNode = inspection.parsedProfile.map {
             InspectorNodeBuilder.makeRootNode(from: $0.plist, certificates: $0.certificates)
         }
@@ -248,6 +241,7 @@ extension PreviewWindowController {
     var debugSegmentedControl: NSSegmentedControl { segmentedControl }
     var debugProfileOutlineView: NSOutlineView { profileOutlineView }
     var debugInfoOutlineView: NSOutlineView { infoOutlineView }
+    var debugPreviewText: String { previewContentView.debugPlainText }
     var debugTitleLabel: NSTextField { titleLabel }
 
     func debugSelectSegment(_ index: Int) {
@@ -256,3 +250,86 @@ extension PreviewWindowController {
     }
 }
 #endif
+
+final class HTMLPreviewView: NSView {
+    private let scrollView = NSScrollView()
+    private let textView = NSTextView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        buildUI()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func loadHTMLString(_ html: String, baseURL _: URL?) {
+        textView.textStorage?.setAttributedString(Self.attributedString(from: html))
+        scrollView.contentView.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    private func buildUI() {
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        scrollView.drawsBackground = false
+
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.isRichText = true
+        textView.importsGraphics = false
+        textView.allowsUndo = false
+        textView.textContainerInset = NSSize(width: 18, height: 18)
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor.systemBlue,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+        ]
+
+        scrollView.documentView = textView
+        addSubview(scrollView)
+        scrollView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+    }
+
+    private static func attributedString(from html: String) -> NSAttributedString {
+        guard let data = html.data(using: .utf8) else {
+            return NSAttributedString(string: html)
+        }
+
+        do {
+            let attributedString = try NSMutableAttributedString(
+                data: data,
+                options: [
+                    .documentType: NSAttributedString.DocumentType.html,
+                    .characterEncoding: String.Encoding.utf8.rawValue,
+                ],
+                documentAttributes: nil
+            )
+            let fullRange = NSRange(location: 0, length: attributedString.length)
+            attributedString.enumerateAttribute(.font, in: fullRange) { value, range, _ in
+                guard let font = value as? NSFont else { return }
+                let pointSize = font.pointSize == 12 ? CGFloat(13) : font.pointSize
+                attributedString.addAttribute(.font, value: NSFont.systemFont(ofSize: pointSize), range: range)
+            }
+            return attributedString
+        } catch {
+            return NSAttributedString(string: html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression))
+        }
+    }
+
+    #if DEBUG
+    var debugPlainText: String {
+        textView.string
+    }
+    #endif
+}

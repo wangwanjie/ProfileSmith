@@ -1,4 +1,7 @@
+import AppKit
+import Darwin
 import Foundation
+import XCTest
 
 final class UITestFixtureContext {
     let rootURL: URL
@@ -41,7 +44,103 @@ final class UITestFixtureContext {
     }
 
     func cleanup() {
+        terminateRunningProfileSmithApplications()
         try? FileManager.default.removeItem(at: rootURL)
+    }
+
+    func launchApplication() throws -> XCUIApplication {
+        terminateRunningProfileSmithApplications()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = [
+            "-n",
+            "-F",
+            "-a",
+            try profileSmithBundleURL().path,
+            "--env",
+            "PROFILESMITH_SCAN_DIRECTORIES=\(scanDirectory.path)",
+            "--env",
+            "PROFILESMITH_SUPPORT_DIRECTORY=\(supportDirectory.path)",
+            "--env",
+            "PROFILESMITH_UI_TEST=1",
+        ]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw NSError(
+                domain: "ProfileSmithUITests",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "open failed with exit code \(process.terminationStatus)."]
+            )
+        }
+
+        let app = XCUIApplication(bundleIdentifier: "cn.vanjay.ProfileSmith")
+        guard waitUntil(timeout: 10, condition: {
+            !NSRunningApplication.runningApplications(withBundleIdentifier: "cn.vanjay.ProfileSmith").isEmpty
+        }) else {
+            throw NSError(
+                domain: "ProfileSmithUITests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "ProfileSmith did not reach a running state in time."]
+            )
+        }
+
+        app.activate()
+        guard app.wait(for: .runningForeground, timeout: 10) else {
+            throw NSError(
+                domain: "ProfileSmithUITests",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "ProfileSmith did not become the foreground application in time."]
+            )
+        }
+        return app
+    }
+
+    func terminateRunningProfileSmithApplications() {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            let runningApplications = NSRunningApplication.runningApplications(withBundleIdentifier: "cn.vanjay.ProfileSmith")
+            guard !runningApplications.isEmpty else { return }
+
+            for application in runningApplications {
+                if !application.terminate() {
+                    _ = application.forceTerminate()
+                }
+                if !application.isTerminated {
+                    kill(application.processIdentifier, SIGKILL)
+                }
+            }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+    }
+
+    private func profileSmithBundleURL() throws -> URL {
+        let appBundleURL = Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("ProfileSmith.app", isDirectory: true)
+
+        guard FileManager.default.fileExists(atPath: appBundleURL.path) else {
+            throw NSError(
+                domain: "ProfileSmithUITests",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to locate ProfileSmith app bundle at \(appBundleURL.path)"]
+            )
+        }
+
+        return appBundleURL
+    }
+
+    private func waitUntil(timeout: TimeInterval, condition: @escaping () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return condition()
     }
 
     private func writeProfile(

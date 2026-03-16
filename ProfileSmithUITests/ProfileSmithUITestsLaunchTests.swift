@@ -17,6 +17,7 @@ final class ProfileSmithUITestsLaunchTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         fixtureContext = try UITestFixtureContext()
+        fixtureContext.terminateRunningProfileSmithApplications()
     }
 
     override func tearDownWithError() throws {
@@ -26,6 +27,7 @@ final class ProfileSmithUITestsLaunchTests: XCTestCase {
 
     @MainActor
     func testLaunch() throws {
+        fixtureContext.terminateRunningProfileSmithApplications()
         let app = XCUIApplication()
         app.launchEnvironment["PROFILESMITH_SCAN_DIRECTORIES"] = fixtureContext.scanDirectory.path
         app.launchEnvironment["PROFILESMITH_SUPPORT_DIRECTORY"] = fixtureContext.supportDirectory.path

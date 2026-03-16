@@ -74,14 +74,9 @@ struct MainViewControllerTests {
             controller.debugTableView.numberOfRows == 2
         }
 
-        controller.debugLoadDetails(for: alphaRecord)
+        try controller.debugLoadDetailsSynchronously(for: alphaRecord)
 
-        try waitUntil(
-            description: "detail title",
-            debugState: { "title=\(controller.debugTitleLabel.stringValue)" }
-        ) {
-            controller.debugTitleLabel.stringValue == "Alpha Dev"
-        }
+        #expect(controller.debugTitleLabel.stringValue == "Alpha Dev")
 
         #expect(controller.debugStatusLabel.stringValue.contains("总计 2 条"))
 
@@ -102,6 +97,86 @@ struct MainViewControllerTests {
         }
 
         #expect(controller.debugStatusLabel.stringValue.contains("当前结果 1 条"))
+    }
+
+    @MainActor
+    @Test
+    func detailSelectionDoesNotShiftSplitViewWidthAndPreviewCompletesRendering() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        _ = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "short-name",
+            name: "Short Name",
+            uuid: "WIDTH-SHORT-AAAA-BBBB-CCCC",
+            teamName: "Width Team",
+            teamIdentifier: "WIDTH1234",
+            bundleIdentifier: "com.example.width.short"
+        )
+        _ = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "very-long-descriptive-profile-file-name-for-layout-regression-checks",
+            name: "A Very Long Provisioning Profile Name Used To Verify The Split View Divider Stays Stable",
+            uuid: "WIDTH-LONG-AAAA-BBBB-CCCC",
+            teamName: "Width Team",
+            teamIdentifier: "WIDTH1234",
+            bundleIdentifier: "com.example.width.long.profile.layout"
+        )
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let parser = MobileProvisionParser()
+        let shortRecord = try parser.parseProfile(
+            at: scanDirectory.appendingPathComponent("short-name.mobileprovision"),
+            sourceLocation: ScanLocation(kind: .custom, url: scanDirectory, displayName: "Tests")
+        ).record
+        let longRecord = try parser.parseProfile(
+            at: scanDirectory.appendingPathComponent("very-long-descriptive-profile-file-name-for-layout-regression-checks.mobileprovision"),
+            sourceLocation: ScanLocation(kind: .custom, url: scanDirectory, displayName: "Tests")
+        ).record
+
+        let controller = MainViewController(context: context)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1380, height: 860),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [shortRecord, longRecord],
+                metrics: ProfileMetrics(totalCount: 2, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+
+        let initialWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
+
+        try controller.debugLoadDetailsSynchronously(for: shortRecord)
+        #expect(controller.debugPreviewText.contains("Short Name"))
+        let shortWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
+
+        try controller.debugLoadDetailsSynchronously(for: longRecord)
+        #expect(controller.debugPreviewText.contains("A Very Long Provisioning Profile Name"))
+        let longWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
+
+        #expect(abs(initialWidth - shortWidth) < 1)
+        #expect(abs(shortWidth - longWidth) < 1)
     }
 
     @MainActor
@@ -131,6 +206,7 @@ struct MainViewControllerTests {
         let controller = PreviewWindowController(inspection: inspection)
 
         #expect(controller.debugTitleLabel.stringValue == "Preview Host")
+        #expect(controller.debugPreviewText.contains("Preview Host"))
 
         controller.debugSelectSegment(1)
         #expect(controller.debugProfileOutlineView.numberOfRows > 0)

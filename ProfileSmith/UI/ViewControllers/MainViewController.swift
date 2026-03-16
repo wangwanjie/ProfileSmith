@@ -1,7 +1,6 @@
 import Cocoa
 import Combine
 import SnapKit
-import WebKit
 
 final class MainViewController: NSViewController {
     private let context: AppContext
@@ -25,6 +24,8 @@ final class MainViewController: NSViewController {
     private let progressIndicator = NSProgressIndicator()
 
     private let splitView = NSSplitView()
+    private let tableContainer = NSView()
+    private let detailContainer = NSView()
     private let tableView = ProfilesTableView()
     private let tableScrollView = NSScrollView()
     private let titleLabel = NSTextField(labelWithString: "ProfileSmith")
@@ -36,10 +37,15 @@ final class MainViewController: NSViewController {
     private let summaryScrollView = NSScrollView()
     private let detailOutlineView = NSOutlineView()
     private let detailOutlineScrollView = NSScrollView()
-    private let previewWebView = WKWebView(frame: .zero)
+    private let previewContentView = HTMLPreviewView()
     private let tabControl = NSSegmentedControl(labels: ["概要", "详情", "预览"], trackingMode: .selectOne, target: nil, action: nil)
     private let tabView = NSTabView()
     private let statusLabel = NSTextField(labelWithString: "准备就绪")
+    private var preferredSplitPosition: CGFloat?
+    private var isApplyingPreferredSplitPosition = false
+
+    private let minimumTablePaneWidth: CGFloat = 360
+    private let minimumDetailPaneWidth: CGFloat = 540
 
     private lazy var actionButtons: [NSButton] = [
         makeActionButton(title: "预览", action: #selector(previewSelectedItems(_:))),
@@ -87,6 +93,19 @@ final class MainViewController: NSViewController {
         buildUI()
         bindRepository()
         configureInitialControls()
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        if ProcessInfo.processInfo.environment["PROFILESMITH_UI_TEST"] == "1" {
+            view.window?.makeFirstResponder(searchField)
+        }
+        stabilizeSplitViewLayout()
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        stabilizeSplitViewLayout()
     }
 
     func handleExternalFiles(_ urls: [URL]) {
@@ -168,24 +187,32 @@ final class MainViewController: NSViewController {
 
         splitView.isVertical = true
         splitView.dividerStyle = .thin
+        splitView.delegate = self
         splitView.autosaveName = "ProfileSmith.SplitView"
+        splitView.setAccessibilityIdentifier("main.splitView")
 
         buildTableArea()
         buildDetailArea()
 
-        let tableContainer = NSView()
         tableContainer.addSubview(tableScrollView)
+        tableContainer.setAccessibilityIdentifier("main.tablePane")
+        tableContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        tableContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         tableScrollView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
 
-        let detailContainer = buildDetailContainer()
+        buildDetailContainer()
+        detailContainer.setAccessibilityIdentifier("main.detailPane")
+        detailContainer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        detailContainer.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         splitView.addArrangedSubview(tableContainer)
         splitView.addArrangedSubview(detailContainer)
 
         statusLabel.font = .systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.setAccessibilityElement(true)
         statusLabel.setAccessibilityIdentifier("main.statusLabel")
 
         view.addSubview(topBar)
@@ -263,10 +290,16 @@ final class MainViewController: NSViewController {
 
     private func buildDetailArea() {
         titleLabel.font = NSFont(name: "Avenir Next Demi Bold", size: 30) ?? .systemFont(ofSize: 30, weight: .semibold)
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titleLabel.setAccessibilityElement(true)
         titleLabel.setAccessibilityIdentifier("main.titleLabel")
         subtitleLabel.font = .systemFont(ofSize: 12)
         subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.lineBreakMode = .byTruncatingMiddle
+        subtitleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        subtitleLabel.setAccessibilityElement(true)
         subtitleLabel.setAccessibilityIdentifier("main.subtitleLabel")
 
         tabControl.selectedSegment = 0
@@ -308,19 +341,13 @@ final class MainViewController: NSViewController {
         detailOutlineScrollView.borderType = .bezelBorder
         detailOutlineScrollView.documentView = detailOutlineView
 
-        previewWebView.setValue(false, forKey: "drawsBackground")
-
         let overviewItem = NSTabViewItem(identifier: "overview")
         overviewItem.view = summaryScrollView
         let detailItem = NSTabViewItem(identifier: "detail")
         detailItem.view = detailOutlineScrollView
         let previewItem = NSTabViewItem(identifier: "preview")
-        let previewContainer = NSView()
-        previewContainer.addSubview(previewWebView)
-        previewWebView.snp.makeConstraints { make in
-            make.edges.equalToSuperview()
-        }
-        previewItem.view = previewContainer
+        previewContentView.setAccessibilityIdentifier("main.previewView")
+        previewItem.view = previewContentView
 
         tabView.tabViewType = .noTabsNoBorder
         tabView.addTabViewItem(overviewItem)
@@ -328,9 +355,7 @@ final class MainViewController: NSViewController {
         tabView.addTabViewItem(previewItem)
     }
 
-    private func buildDetailContainer() -> NSView {
-        let container = NSView()
-
+    private func buildDetailContainer() {
         let badgesRow = NSStackView(views: [typeBadge, platformBadge, statusBadge])
         badgesRow.orientation = .horizontal
         badgesRow.alignment = .centerY
@@ -344,12 +369,12 @@ final class MainViewController: NSViewController {
         actionsRow.spacing = 8
         actionsRow.distribution = .fillProportionally
 
-        container.addSubview(titleLabel)
-        container.addSubview(subtitleLabel)
-        container.addSubview(badgesRow)
-        container.addSubview(actionsRow)
-        container.addSubview(tabControl)
-        container.addSubview(tabView)
+        detailContainer.addSubview(titleLabel)
+        detailContainer.addSubview(subtitleLabel)
+        detailContainer.addSubview(badgesRow)
+        detailContainer.addSubview(actionsRow)
+        detailContainer.addSubview(tabControl)
+        detailContainer.addSubview(tabView)
 
         titleLabel.snp.makeConstraints { make in
             make.top.equalToSuperview().offset(18)
@@ -380,8 +405,6 @@ final class MainViewController: NSViewController {
             make.top.equalTo(tabControl.snp.bottom).offset(12)
             make.leading.trailing.bottom.equalToSuperview().inset(18)
         }
-
-        return container
     }
 
     private func configureInitialControls() {
@@ -439,6 +462,7 @@ final class MainViewController: NSViewController {
             reloadSelectionDrivenUI()
         }
         updateStatusLabel(snapshot: snapshot)
+        stabilizeSplitViewLayout()
     }
 
     private func restoreSelection(for paths: [String]) {
@@ -468,17 +492,7 @@ final class MainViewController: NSViewController {
     private func loadDetails(for record: ProfileRecord) {
         detailRequestID &+= 1
         let requestID = detailRequestID
-        currentParsedProfile = nil
-        currentInspection = nil
-        currentInspectorRoot = nil
-
-        titleLabel.stringValue = record.displayName
-        subtitleLabel.stringValue = record.path
-        summaryTextView.string = "正在解析描述文件详情…"
-        previewWebView.loadHTMLString("<html><body style='font-family:-apple-system;padding:24px;'>正在生成预览…</body></html>", baseURL: nil)
-        typeBadge.configure(text: record.profileType, fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
-        platformBadge.configure(text: record.profilePlatform, fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
-        statusBadge.configure(text: record.statusText, fillColor: badgeColor(for: record).withAlphaComponent(0.16), textColor: badgeColor(for: record))
+        prepareDetailLoadingState(for: record)
 
         detailQueue.async { [weak self] in
             guard let self else { return }
@@ -490,31 +504,56 @@ final class MainViewController: NSViewController {
 
                 DispatchQueue.main.async {
                     guard self.detailRequestID == requestID else { return }
-                    self.currentParsedProfile = parsedProfile
-                    self.currentInspection = inspection
-                    self.currentInspectorRoot = rootNode
-                    self.detailOutlineView.reloadData()
-                    self.detailOutlineView.expandItem(nil, expandChildren: true)
-                    self.previewWebView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
-                    self.summaryTextView.string = self.makeSummaryText(for: parsedProfile)
-                    self.titleLabel.stringValue = parsedProfile.record.displayName
-                    self.subtitleLabel.stringValue = parsedProfile.record.path
+                    self.applyLoadedDetails(parsedProfile, inspection: inspection, rootNode: rootNode)
                 }
             } catch {
                 DispatchQueue.main.async {
                     guard self.detailRequestID == requestID else { return }
-                    self.currentParsedProfile = nil
-                    self.currentInspection = nil
-                    self.currentInspectorRoot = nil
-                    self.detailOutlineView.reloadData()
-                    self.summaryTextView.string = "解析失败：\(error.localizedDescription)"
-                    self.previewWebView.loadHTMLString(
-                        "<html><body style='font-family:-apple-system;padding:24px;'>\(error.localizedDescription)</body></html>",
-                        baseURL: nil
-                    )
+                    self.applyDetailLoadingError(error)
                 }
             }
         }
+    }
+
+    private func prepareDetailLoadingState(for record: ProfileRecord) {
+        currentParsedProfile = nil
+        currentInspection = nil
+        currentInspectorRoot = nil
+
+        titleLabel.stringValue = record.displayName
+        subtitleLabel.stringValue = record.path
+        summaryTextView.string = "正在解析描述文件详情…"
+        previewContentView.loadHTMLString("<html><body style='font-family:-apple-system;padding:24px;'>正在生成预览…</body></html>", baseURL: nil)
+        typeBadge.configure(text: record.profileType, fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
+        platformBadge.configure(text: record.profilePlatform, fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
+        statusBadge.configure(text: record.statusText, fillColor: badgeColor(for: record).withAlphaComponent(0.16), textColor: badgeColor(for: record))
+        stabilizeSplitViewLayout()
+    }
+
+    private func applyLoadedDetails(_ parsedProfile: ParsedProfile, inspection: PreviewInspection, rootNode: InspectorNode) {
+        currentParsedProfile = parsedProfile
+        currentInspection = inspection
+        currentInspectorRoot = rootNode
+        detailOutlineView.reloadData()
+        detailOutlineView.expandItem(nil, expandChildren: true)
+        previewContentView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
+        summaryTextView.string = makeSummaryText(for: parsedProfile)
+        titleLabel.stringValue = parsedProfile.record.displayName
+        subtitleLabel.stringValue = parsedProfile.record.path
+        stabilizeSplitViewLayout()
+    }
+
+    private func applyDetailLoadingError(_ error: Error) {
+        currentParsedProfile = nil
+        currentInspection = nil
+        currentInspectorRoot = nil
+        detailOutlineView.reloadData()
+        summaryTextView.string = "解析失败：\(error.localizedDescription)"
+        previewContentView.loadHTMLString(
+            "<html><body style='font-family:-apple-system;padding:24px;'>\(error.localizedDescription)</body></html>",
+            baseURL: nil
+        )
+        stabilizeSplitViewLayout()
     }
 
     private func applyEmptyDetailState() {
@@ -531,13 +570,14 @@ final class MainViewController: NSViewController {
         3. 可以直接拖入 `.mobileprovision` / `.provisionprofile` 安装，也可以拖入 `.ipa` / `.xcarchive` / `.appex` / `.app` 做描述文件与 Info.plist 预览。
         4. Finder Quick Look 已随应用内建；若 Finder 尚未识别，可点击顶部 `Finder Quick Look` 按钮刷新注册。
         """
-        previewWebView.loadHTMLString(
+        previewContentView.loadHTMLString(
             "<html><body style='font-family:-apple-system;padding:32px;background:#f4f7fb;'><h1>ProfileSmith</h1><p>选择一个描述文件，或直接把文件拖进窗口。</p></body></html>",
             baseURL: nil
         )
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
         updateActionState()
+        stabilizeSplitViewLayout()
     }
 
     private func applyBulkSelectionDetailState(_ records: [ProfileRecord]) {
@@ -552,7 +592,7 @@ final class MainViewController: NSViewController {
         summaryTextView.string = records.map { record in
             "\(record.displayName)\n  \(record.bundleIdentifier ?? record.appIDName ?? "-")\n  \(record.profileType ?? "-") | \(record.statusText)\n  \(record.path)"
         }.joined(separator: "\n\n")
-        previewWebView.loadHTMLString(
+        previewContentView.loadHTMLString(
             "<html><body style='font-family:-apple-system;padding:24px;'><h2>已选择 \(records.count) 个描述文件</h2><p>批量操作可用，详情树和预览仅在单选时展示。</p></body></html>",
             baseURL: nil
         )
@@ -560,6 +600,7 @@ final class MainViewController: NSViewController {
         currentInspection = nil
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
+        stabilizeSplitViewLayout()
     }
 
     private func makeSummaryText(for parsedProfile: ParsedProfile) -> String {
@@ -633,6 +674,51 @@ final class MainViewController: NSViewController {
             statusLabel.stringValue = "当前结果 \(currentResultCount) 条，已选中 \(selectionCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
         } else {
             statusLabel.stringValue = "当前结果 \(currentResultCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
+        }
+    }
+
+    private func stabilizeSplitViewLayout() {
+        guard splitView.arrangedSubviews.count == 2 else { return }
+
+        if preferredSplitPosition == nil {
+            let currentWidth = tableContainer.frame.width
+            if currentWidth > 0 {
+                preferredSplitPosition = currentWidth
+            }
+        }
+
+        guard let preferredSplitPosition else { return }
+        let clampedPosition = clampedSplitPosition(for: preferredSplitPosition)
+        let currentPosition = tableContainer.frame.width
+        guard abs(currentPosition - clampedPosition) > 0.5 else { return }
+
+        isApplyingPreferredSplitPosition = true
+        splitView.setPosition(clampedPosition, ofDividerAt: 0)
+        splitView.layoutSubtreeIfNeeded()
+        isApplyingPreferredSplitPosition = false
+    }
+
+    private func clampedSplitPosition(for proposedPosition: CGFloat) -> CGFloat {
+        let availableWidth = max(0, splitView.bounds.width - splitView.dividerThickness)
+        guard availableWidth > 0 else { return proposedPosition }
+
+        let minimumCombinedWidth = minimumTablePaneWidth + minimumDetailPaneWidth
+        if availableWidth <= minimumCombinedWidth {
+            return round(availableWidth * 0.42)
+        }
+
+        let maximumTableWidth = availableWidth - minimumDetailPaneWidth
+        return min(max(proposedPosition, minimumTablePaneWidth), maximumTableWidth)
+    }
+
+    private var isUserDraggingSplitDivider: Bool {
+        guard NSEvent.pressedMouseButtons != 0 else { return false }
+        guard let event = NSApp.currentEvent else { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseDragged, .otherMouseDown, .otherMouseDragged:
+            return true
+        default:
+            return false
         }
     }
 
@@ -884,6 +970,25 @@ extension MainViewController: DropHostingViewDelegate {
     }
 }
 
+extension MainViewController: NSSplitViewDelegate {
+    func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        minimumTablePaneWidth
+    }
+
+    func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+        max(minimumTablePaneWidth, splitView.bounds.width - splitView.dividerThickness - minimumDetailPaneWidth)
+    }
+
+    func splitViewDidResizeSubviews(_ notification: Notification) {
+        guard !isApplyingPreferredSplitPosition else { return }
+        guard isUserDraggingSplitDivider else {
+            stabilizeSplitViewLayout()
+            return
+        }
+        preferredSplitPosition = tableContainer.frame.width
+    }
+}
+
 extension MainViewController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
         currentProfiles.count
@@ -1096,9 +1201,11 @@ extension MainViewController: NSMenuDelegate {
 #if DEBUG
 extension MainViewController {
     var debugTableView: ProfilesTableView { tableView }
+    var debugSplitView: NSSplitView { splitView }
     var debugTitleLabel: NSTextField { titleLabel }
     var debugSubtitleLabel: NSTextField { subtitleLabel }
     var debugSummaryTextView: NSTextView { summaryTextView }
+    var debugPreviewText: String { previewContentView.debugPlainText }
     var debugSearchField: NSSearchField { searchField }
     var debugStatusLabel: NSTextField { statusLabel }
 
@@ -1112,6 +1219,15 @@ extension MainViewController {
 
     func debugLoadDetails(for record: ProfileRecord) {
         loadDetails(for: record)
+    }
+
+    func debugLoadDetailsSynchronously(for record: ProfileRecord) throws {
+        detailRequestID &+= 1
+        prepareDetailLoadingState(for: record)
+        let parsedProfile = try context.repository.loadProfileDetails(for: record)
+        let inspection = context.archiveInspector.makeInspection(for: parsedProfile, sourceURL: URL(fileURLWithPath: record.path))
+        let rootNode = InspectorNodeBuilder.makeRootNode(from: parsedProfile.plist, certificates: parsedProfile.certificates)
+        applyLoadedDetails(parsedProfile, inspection: inspection, rootNode: rootNode)
     }
 }
 #endif
