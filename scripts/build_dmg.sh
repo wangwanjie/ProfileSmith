@@ -36,12 +36,12 @@ let outer = NSBezierPath(roundedRect: rect, xRadius: 24, yRadius: 24)
 NSColor(calibratedRed: 0.95, green: 0.97, blue: 0.99, alpha: 1).setFill()
 outer.fill()
 
-let topBand = NSRect(x: 0, y: 258, width: size.width, height: 102)
+let topBand = NSRect(x: 0, y: 272, width: size.width, height: 88)
 let bandPath = NSBezierPath(roundedRect: topBand, xRadius: 24, yRadius: 24)
 NSColor(calibratedRed: 0.80, green: 0.89, blue: 0.97, alpha: 1).setFill()
 bandPath.fill()
 
-let topMask = NSRect(x: 0, y: 258, width: size.width, height: 50)
+let topMask = NSRect(x: 0, y: 272, width: size.width, height: 38)
 NSColor(calibratedRed: 0.80, green: 0.89, blue: 0.97, alpha: 1).setFill()
 topMask.fill()
 
@@ -54,6 +54,28 @@ func drawText(_ text: String, rect: NSRect, font: NSFont, color: NSColor, alignm
         .paragraphStyle: paragraph,
     ]
     text.draw(in: rect, withAttributes: attributes)
+}
+
+func drawCenteredBadgeText(_ text: String, rect: NSRect, font: NSFont, color: NSColor) {
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = .center
+    let attributes: [NSAttributedString.Key: Any] = [
+        .font: font,
+        .foregroundColor: color,
+        .paragraphStyle: paragraph,
+    ]
+    let attributed = NSAttributedString(string: text, attributes: attributes)
+    let textRect = attributed.boundingRect(
+        with: NSSize(width: rect.width, height: .greatestFiniteMagnitude),
+        options: [.usesLineFragmentOrigin, .usesFontLeading]
+    )
+    let centeredRect = NSRect(
+        x: rect.minX,
+        y: rect.midY - textRect.height / 2,
+        width: rect.width,
+        height: ceil(textRect.height)
+    )
+    attributed.draw(in: centeredRect)
 }
 
 func drawPanel(_ rect: NSRect) {
@@ -94,29 +116,31 @@ drawText(
 
 drawText(
     "Install by dragging the app onto the Applications shortcut",
-    rect: NSRect(x: 70, y: 250, width: 480, height: 24),
+    rect: NSRect(x: 70, y: 242, width: 480, height: 22),
     font: NSFont(name: "Avenir Next Regular", size: 14) ?? .systemFont(ofSize: 14, weight: .regular),
     color: NSColor(calibratedRed: 0.24, green: 0.32, blue: 0.43, alpha: 1)
 )
 
-let badge1 = NSBezierPath(roundedRect: NSRect(x: 230, y: 128, width: 54, height: 54), xRadius: 27, yRadius: 27)
+let badge1Rect = NSRect(x: 230, y: 128, width: 54, height: 54)
+let badge1 = NSBezierPath(roundedRect: badge1Rect, xRadius: 27, yRadius: 27)
 NSColor(calibratedRed: 0.88, green: 0.94, blue: 0.98, alpha: 1).setFill()
 badge1.fill()
 
-drawText(
+drawCenteredBadgeText(
     "1",
-    rect: NSRect(x: 245, y: 137, width: 24, height: 24),
+    rect: badge1Rect,
     font: .systemFont(ofSize: 22, weight: .bold),
     color: NSColor(calibratedRed: 0.14, green: 0.45, blue: 0.72, alpha: 1)
 )
 
-let badge2 = NSBezierPath(roundedRect: NSRect(x: 336, y: 128, width: 54, height: 54), xRadius: 27, yRadius: 27)
+let badge2Rect = NSRect(x: 336, y: 128, width: 54, height: 54)
+let badge2 = NSBezierPath(roundedRect: badge2Rect, xRadius: 27, yRadius: 27)
 NSColor(calibratedRed: 0.88, green: 0.94, blue: 0.98, alpha: 1).setFill()
 badge2.fill()
 
-drawText(
+drawCenteredBadgeText(
     "2",
-    rect: NSRect(x: 351, y: 137, width: 24, height: 24),
+    rect: badge2Rect,
     font: .systemFont(ofSize: 22, weight: .bold),
     color: NSColor(calibratedRed: 0.14, green: 0.45, blue: 0.72, alpha: 1)
 )
@@ -236,6 +260,7 @@ create_pretty_dmg() {
     local staging_dir="$work_dir/staging"
     local background_dir="$staging_dir/.background"
     local background_path="$background_dir/installer-background.png"
+    local fsevents_dir="$staging_dir/.fseventsd"
     local rw_dmg_path="$work_dir/${volume_name}.temp.dmg"
     local app_name
     local device
@@ -246,11 +271,13 @@ create_pretty_dmg() {
     app_name="$(basename "$app_path")"
 
     rm -rf "$work_dir"
-    mkdir -p "$staging_dir" "$background_dir"
+    mkdir -p "$staging_dir" "$background_dir" "$fsevents_dir"
     cp -R "$app_path" "$staging_dir/"
     ln -s /Applications "$staging_dir/Applications"
     generate_dmg_background "$background_path"
+    touch "$fsevents_dir/no_log"
     chflags hidden "$background_dir" 2>/dev/null || true
+    chflags hidden "$fsevents_dir" 2>/dev/null || true
 
     hdiutil create -volname "$volume_name" \
         -srcfolder "$staging_dir" \
@@ -270,6 +297,9 @@ create_pretty_dmg() {
         exit 1
     fi
 
+    chflags hidden "$mounted_volume_path/.background" 2>/dev/null || true
+    chflags hidden "$mounted_volume_path/.fseventsd" 2>/dev/null || true
+
     osascript <<EOF
 tell application "Finder"
     tell disk "$mounted_volume_name"
@@ -285,9 +315,21 @@ tell application "Finder"
         set background picture of viewOptions to file ".background:installer-background.png"
         set position of item "$app_name" of container window to {154, 180}
         set position of item "Applications" of container window to {466, 180}
+        try
+            set position of item ".background" of container window to {860, 320}
+        end try
+        try
+            set position of item ".fseventsd" of container window to {960, 320}
+        end try
         close
         open
         update without registering applications
+        try
+            set position of item ".background" of container window to {860, 320}
+        end try
+        try
+            set position of item ".fseventsd" of container window to {960, 320}
+        end try
         delay 1
         set bounds of container window to {220, 120, 830, 510}
         delay 1
