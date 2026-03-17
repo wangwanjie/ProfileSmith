@@ -14,6 +14,10 @@ final class MainViewController: NSViewController {
     private var currentInspection: PreviewInspection?
     private var currentInspectorRoot: InspectorNode?
     private var previewWindowController: PreviewWindowController?
+    private var pendingRevealPaths: [String] = []
+    private var hasExpandedQueryForPendingReveal = false
+    private var activeTableSortDescriptor: NSSortDescriptor?
+    private var lastRequestedVisibleRow: Int?
 
     private let filterPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sortPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -50,8 +54,11 @@ final class MainViewController: NSViewController {
     private var isApplyingPreferredSplitPosition = false
     private var isRepositoryRefreshing = false
 
-    private let minimumTablePaneWidth: CGFloat = 360
     private let minimumDetailPaneWidth: CGFloat = 540
+
+    private var minimumTablePaneWidth: CGFloat {
+        tableView.tableColumns.first(where: { $0.identifier.rawValue == "name" })?.minWidth ?? 80
+    }
 
     private lazy var actionButtons: [NSButton] = [
         makeActionButton(title: "预览", action: #selector(previewSelectedItems(_:))),
@@ -116,7 +123,7 @@ final class MainViewController: NSViewController {
     }
 
     func handleExternalFiles(_ urls: [URL]) {
-        handleIncomingFiles(urls)
+        handleIncomingFiles(urls, shouldShowImportAlert: false)
     }
 
     func presentImportPanel(_ sender: Any?) {
@@ -305,9 +312,10 @@ final class MainViewController: NSViewController {
 
     private func buildTableArea() {
         tableScrollView.hasVerticalScroller = true
+        tableScrollView.hasHorizontalScroller = true
+        tableScrollView.autohidesScrollers = true
         tableScrollView.borderType = .bezelBorder
 
-        tableView.headerView = NSTableHeaderView()
         tableView.usesAlternatingRowBackgroundColors = false
         tableView.selectionHighlightStyle = .sourceList
         tableView.rowHeight = 32
@@ -325,29 +333,28 @@ final class MainViewController: NSViewController {
         }
         tableView.menu = profileContextMenu
 
-        let columns: [(String, String, CGFloat)] = [
-            ("name", "名称", 220),
-            ("bundle", "Bundle ID", 210),
-            ("team", "Team", 160),
-            ("type", "类型", 150),
-            ("expires", "到期", 120),
-            ("status", "状态", 120),
+        let columns: [(identifier: String, title: String, width: CGFloat, minWidth: CGFloat, sortKey: String)] = [
+            ("name", "名称", 220, 80, "name"),
+            ("bundle", "Bundle ID", 230, 120, "bundle"),
+            ("team", "Team", 170, 100, "team"),
+            ("platform", "平台", 40, 30, "platform"),
+            ("type", "类型", 120, 80, "type"),
+            ("expires", "到期", 110, 90, "expires"),
+            ("status", "状态", 110, 70, "status"),
         ]
 
-        for (identifier, title, width) in columns {
-            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
-            column.title = title
-            column.width = width
-            column.minWidth = 90
+        for columnSpec in columns {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(columnSpec.identifier))
+            column.title = columnSpec.title
+            column.width = columnSpec.width
+            column.minWidth = columnSpec.minWidth
             column.resizingMask = .userResizingMask
+            column.sortDescriptorPrototype = NSSortDescriptor(key: columnSpec.sortKey, ascending: true)
+            if columnSpec.identifier == "status" {
+                column.headerCell = TrailingBorderlessTableHeaderCell(textCell: columnSpec.title)
+            }
             tableView.addTableColumn(column)
         }
-
-        tableView.tableColumns[0].sortDescriptorPrototype = NSSortDescriptor(key: "name", ascending: true)
-        tableView.tableColumns[1].sortDescriptorPrototype = NSSortDescriptor(key: "bundleIdentifier", ascending: true)
-        tableView.tableColumns[2].sortDescriptorPrototype = NSSortDescriptor(key: "teamName", ascending: true)
-        tableView.tableColumns[4].sortDescriptorPrototype = NSSortDescriptor(key: "expirationDate", ascending: true)
-        tableView.tableColumns[5].sortDescriptorPrototype = NSSortDescriptor(key: "status", ascending: true)
 
         tableScrollView.documentView = tableView
     }
@@ -524,9 +531,18 @@ final class MainViewController: NSViewController {
 
     private func applySnapshot(_ snapshot: RepositorySnapshot) {
         currentProfiles = snapshot.profiles
+        applyActiveTableSorting()
         let preservedPaths = selectedPaths
         tableView.reloadData()
         restoreSelection(for: preservedPaths)
+        resolvePendingRevealIfNeeded(snapshot: snapshot)
+
+        if !pendingRevealPaths.isEmpty && tableView.selectedRowIndexes.isEmpty {
+            syncRepositoryRefreshState(snapshot: snapshot)
+            stabilizeSplitViewLayout()
+            return
+        }
+
         if currentProfiles.isEmpty {
             applyEmptyDetailState()
         } else if tableView.selectedRowIndexes.isEmpty {
@@ -543,6 +559,84 @@ final class MainViewController: NSViewController {
         let indexes = IndexSet(paths.compactMap { path in currentProfiles.firstIndex(where: { $0.path == path }) })
         guard !indexes.isEmpty else { return }
         tableView.selectRowIndexes(indexes, byExtendingSelection: false)
+    }
+
+    private func requestRevealOfProfiles(at paths: [String], refreshRepository: Bool) {
+        let revealPaths = deduplicatedProfilePaths(paths)
+        guard !revealPaths.isEmpty else { return }
+
+        selectedPaths = revealPaths
+        pendingRevealPaths = revealPaths
+        hasExpandedQueryForPendingReveal = false
+
+        if selectProfiles(at: revealPaths, scrollToVisible: true) {
+            pendingRevealPaths = []
+            return
+        }
+
+        if refreshRepository {
+            context.repository.refresh(forceReindex: false)
+        } else {
+            resolvePendingRevealIfNeeded(snapshot: context.repository.snapshot)
+        }
+    }
+
+    @discardableResult
+    private func selectProfiles(at paths: [String], scrollToVisible: Bool) -> Bool {
+        let indexes = IndexSet(paths.compactMap { path in currentProfiles.firstIndex(where: { $0.path == path }) })
+        guard !indexes.isEmpty else { return false }
+
+        tableView.selectRowIndexes(indexes, byExtendingSelection: false)
+        if scrollToVisible, let row = indexes.first {
+            scrollRowToVisibleAfterLayout(row)
+        }
+        return true
+    }
+
+    private func scrollRowToVisibleAfterLayout(_ row: Int) {
+        guard row >= 0 else { return }
+        lastRequestedVisibleRow = row
+        tableView.scrollRowToVisible(row)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, row < self.tableView.numberOfRows else { return }
+            self.tableView.enclosingScrollView?.layoutSubtreeIfNeeded()
+            self.tableView.layoutSubtreeIfNeeded()
+            self.tableView.scrollRowToVisible(row)
+        }
+    }
+
+    private func resolvePendingRevealIfNeeded(snapshot: RepositorySnapshot) {
+        guard !pendingRevealPaths.isEmpty else {
+            hasExpandedQueryForPendingReveal = false
+            return
+        }
+
+        if selectProfiles(at: pendingRevealPaths, scrollToVisible: true) {
+            pendingRevealPaths = []
+            hasExpandedQueryForPendingReveal = false
+            return
+        }
+
+        let searchText = snapshot.query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needsSearchReset = !searchText.isEmpty
+        let needsFilterReset = snapshot.query.filter != .all
+        guard !hasExpandedQueryForPendingReveal, needsSearchReset || needsFilterReset else { return }
+
+        hasExpandedQueryForPendingReveal = true
+        if needsSearchReset {
+            searchField.stringValue = ""
+            context.repository.setSearchText("")
+        }
+        if needsFilterReset {
+            filterPopUp.selectItem(at: ProfileFilter.allCases.firstIndex(of: .all) ?? 0)
+            context.repository.setFilter(.all)
+        }
+    }
+
+    private func deduplicatedProfilePaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 
     private func reloadSelectionDrivenUI() {
@@ -974,6 +1068,170 @@ final class MainViewController: NSViewController {
         return renamedRecord
     }
 
+    private func applyActiveTableSorting() {
+        guard let descriptor = activeTableSortDescriptor else { return }
+        currentProfiles.sort(by: comparator(for: descriptor))
+    }
+
+    private func comparator(for descriptor: NSSortDescriptor) -> (ProfileRecord, ProfileRecord) -> Bool {
+        let ascending = descriptor.ascending
+
+        switch descriptor.key {
+        case "name":
+            return { [weak self] lhs, rhs in
+                self?.orderedText(
+                    lhs.displayName,
+                    rhs.displayName,
+                    ascending: ascending,
+                    fallback: self?.tieBreak(lhs, rhs) ?? false
+                ) ?? false
+            }
+        case "bundle":
+            return { [weak self] lhs, rhs in
+                self?.orderedOptionalText(
+                    lhs.bundleIdentifier ?? lhs.appIDName,
+                    rhs.bundleIdentifier ?? rhs.appIDName,
+                    ascending: ascending,
+                    fallback: self?.tieBreak(lhs, rhs) ?? false
+                ) ?? false
+            }
+        case "team":
+            return { [weak self] lhs, rhs in
+                self?.orderedOptionalText(
+                    lhs.teamName,
+                    rhs.teamName,
+                    ascending: ascending,
+                    fallback: self?.tieBreak(lhs, rhs) ?? false
+                ) ?? false
+            }
+        case "platform":
+            return { [weak self] lhs, rhs in
+                guard let self else { return false }
+                let platformOrder = self.optionalTextComparison(lhs.profilePlatform, rhs.profilePlatform)
+                if platformOrder != .orderedSame {
+                    return self.apply(order: platformOrder, ascending: ascending)
+                }
+                return self.orderedOptionalText(
+                    lhs.profileType,
+                    rhs.profileType,
+                    ascending: ascending,
+                    fallback: self.tieBreak(lhs, rhs)
+                )
+            }
+        case "type":
+            return { [weak self] lhs, rhs in
+                guard let self else { return false }
+                let typeOrder = self.optionalTextComparison(lhs.profileType, rhs.profileType)
+                if typeOrder != .orderedSame {
+                    return self.apply(order: typeOrder, ascending: ascending)
+                }
+                return self.orderedOptionalText(
+                    lhs.profilePlatform,
+                    rhs.profilePlatform,
+                    ascending: ascending,
+                    fallback: self.tieBreak(lhs, rhs)
+                )
+            }
+        case "expires":
+            return { [weak self] lhs, rhs in
+                guard let self else { return false }
+                if lhs.isExpired != rhs.isExpired {
+                    return lhs.isExpired == false
+                }
+
+                let expirationOrder = self.optionalTimeComparison(lhs.expirationDate, rhs.expirationDate)
+                if expirationOrder != .orderedSame {
+                    return self.apply(order: expirationOrder, ascending: ascending)
+                }
+                return self.tieBreak(lhs, rhs)
+            }
+        case "status":
+            return { [weak self] lhs, rhs in
+                guard let self else { return false }
+                let lhsRank = self.statusSortRank(for: lhs)
+                let rhsRank = self.statusSortRank(for: rhs)
+                if lhsRank != rhsRank {
+                    return ascending ? lhsRank < rhsRank : lhsRank > rhsRank
+                }
+                return self.tieBreak(lhs, rhs)
+            }
+        default:
+            return { [weak self] lhs, rhs in
+                self?.tieBreak(lhs, rhs) ?? false
+            }
+        }
+    }
+
+    private func orderedText(_ lhs: String, _ rhs: String, ascending: Bool, fallback: Bool) -> Bool {
+        let order = lhs.localizedStandardCompare(rhs)
+        if order == .orderedSame {
+            return fallback
+        }
+        return apply(order: order, ascending: ascending)
+    }
+
+    private func orderedOptionalText(_ lhs: String?, _ rhs: String?, ascending: Bool, fallback: Bool) -> Bool {
+        let order = optionalTextComparison(lhs, rhs)
+        if order == .orderedSame {
+            return fallback
+        }
+        return apply(order: order, ascending: ascending)
+    }
+
+    private func optionalTextComparison(_ lhs: String?, _ rhs: String?) -> ComparisonResult {
+        let normalizedLeft = lhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedRight = rhs?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch (normalizedLeft?.isEmpty == false ? normalizedLeft : nil, normalizedRight?.isEmpty == false ? normalizedRight : nil) {
+        case let (left?, right?):
+            return left.localizedStandardCompare(right)
+        case (nil, nil):
+            return .orderedSame
+        case (nil, _):
+            return .orderedDescending
+        case (_, nil):
+            return .orderedAscending
+        }
+    }
+
+    private func optionalTimeComparison(_ lhs: TimeInterval?, _ rhs: TimeInterval?) -> ComparisonResult {
+        switch (lhs, rhs) {
+        case let (left?, right?):
+            if left == right {
+                return .orderedSame
+            }
+            return left < right ? .orderedAscending : .orderedDescending
+        case (nil, nil):
+            return .orderedSame
+        case (nil, _):
+            return .orderedDescending
+        case (_, nil):
+            return .orderedAscending
+        }
+    }
+
+    private func statusSortRank(for record: ProfileRecord) -> (Int, Int) {
+        if record.isExpired {
+            return (0, Int.min)
+        }
+        if let daysUntilExpiration = record.daysUntilExpiration, daysUntilExpiration <= 30 {
+            return (1, daysUntilExpiration)
+        }
+        return (2, record.daysUntilExpiration ?? Int.max)
+    }
+
+    private func apply(order: ComparisonResult, ascending: Bool) -> Bool {
+        ascending ? order == .orderedAscending : order == .orderedDescending
+    }
+
+    private func tieBreak(_ lhs: ProfileRecord, _ rhs: ProfileRecord) -> Bool {
+        let nameOrder = lhs.displayName.localizedStandardCompare(rhs.displayName)
+        if nameOrder != .orderedSame {
+            return nameOrder == .orderedAscending
+        }
+        return lhs.path < rhs.path
+    }
+
     private func makeActionButton(title: String, action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
@@ -996,19 +1254,87 @@ final class MainViewController: NSViewController {
         return cleaned.isEmpty ? "Profile" : cleaned
     }
 
-    private func handleIncomingFiles(_ urls: [URL]) {
+    private func existingManagedProfilePath(for url: URL) -> String? {
+        let standardizedURL = url.standardizedFileURL
+        let standardizedPath = standardizedURL.path
+
+        if isManagedProfileURL(standardizedURL) {
+            return standardizedPath
+        }
+
+        if let exactMatch = currentProfiles.first(where: {
+            URL(fileURLWithPath: $0.path).standardizedFileURL.path == standardizedPath
+        }) {
+            return exactMatch.path
+        }
+
+        guard let parsedProfile = try? context.parser.parseProfile(
+            at: standardizedURL,
+            sourceLocation: context.supportPaths.primaryInstallLocation
+        ),
+        let uuid = parsedProfile.record.uuid?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !uuid.isEmpty
+        else {
+            return nil
+        }
+
+        let fileExtension = standardizedURL.pathExtension.lowercased()
+        for location in context.supportPaths.scanLocations {
+            let candidateURL = location.url
+                .appendingPathComponent(uuid, isDirectory: false)
+                .appendingPathExtension(fileExtension)
+            if FileManager.default.fileExists(atPath: candidateURL.path) {
+                return candidateURL.path
+            }
+        }
+
+        if let uuidMatch = currentProfiles.first(where: { $0.uuid == uuid }) {
+            return uuidMatch.path
+        }
+
+        return context.repository.snapshot.profiles.first(where: { $0.uuid == uuid })?.path
+    }
+
+    private func isManagedProfileURL(_ url: URL) -> Bool {
+        let standardizedPath = url.standardizedFileURL.path
+        return context.supportPaths.scanLocations.contains { location in
+            let locationPath = location.url.standardizedFileURL.path
+            return standardizedPath == locationPath || standardizedPath.hasPrefix(locationPath + "/")
+        }
+    }
+
+    private func handleIncomingFiles(_ urls: [URL], shouldShowImportAlert: Bool = true) {
         let profileURLs = urls.filter(ProfileScanner.isSupportedProfileFile(url:))
         let previewURLs = urls.filter { !ProfileScanner.isSupportedProfileFile(url: $0) }
 
         do {
+            var revealPaths: [String] = []
             if !profileURLs.isEmpty {
-                let result = try context.fileOperations.importProfiles(from: profileURLs)
-                context.repository.refresh(forceReindex: false)
+                var urlsToImport: [URL] = []
+                for profileURL in profileURLs {
+                    if let existingPath = existingManagedProfilePath(for: profileURL) {
+                        revealPaths.append(existingPath)
+                    } else {
+                        urlsToImport.append(profileURL)
+                    }
+                }
 
-                if !result.installedURLs.isEmpty || !result.skippedURLs.isEmpty {
+                var importResult = ImportResult(installedURLs: [], skippedURLs: [])
+                if !urlsToImport.isEmpty {
+                    importResult = try context.fileOperations.importProfiles(from: urlsToImport)
+                    revealPaths.append(contentsOf: importResult.installedURLs.map(\.path))
+                    revealPaths.append(contentsOf: importResult.skippedURLs.map(\.path))
+                }
+
+                requestRevealOfProfiles(
+                    at: deduplicatedProfilePaths(revealPaths),
+                    refreshRepository: !importResult.installedURLs.isEmpty
+                )
+
+                if shouldShowImportAlert && (!importResult.installedURLs.isEmpty || !importResult.skippedURLs.isEmpty) {
                     let alert = NSAlert()
                     alert.messageText = "导入完成"
-                    alert.informativeText = "已安装 \(result.installedURLs.count) 个，已跳过 \(result.skippedURLs.count) 个重复文件。"
+                    alert.informativeText = "已安装 \(importResult.installedURLs.count) 个，已跳过 \(importResult.skippedURLs.count) 个重复文件。"
                     alert.runModal()
                 }
             }
@@ -1048,6 +1374,10 @@ final class MainViewController: NSViewController {
 
     @objc private func sortChanged(_ sender: Any?) {
         let index = max(0, sortPopUp.indexOfSelectedItem)
+        activeTableSortDescriptor = nil
+        if !tableView.sortDescriptors.isEmpty {
+            tableView.sortDescriptors = []
+        }
         context.repository.setSort(ProfileSort.allCases[index])
     }
 
@@ -1190,6 +1520,7 @@ final class MainViewController: NSViewController {
             record.displayName,
             record.bundleIdentifier ?? record.appIDName ?? "-",
             record.teamName ?? "-",
+            record.profilePlatform ?? "-",
             record.profileType ?? "-",
             record.expirationDateValue.map(Formatters.dayString(from:)) ?? "-",
             record.statusText,
@@ -1267,6 +1598,10 @@ extension MainViewController: NSTableViewDataSource, NSTableViewDelegate {
             cell.textField?.stringValue = record.teamName ?? "-"
             cell.textField?.font = .systemFont(ofSize: 12)
             cell.textField?.textColor = .secondaryLabelColor
+        case "platform":
+            cell.textField?.stringValue = record.profilePlatform ?? "-"
+            cell.textField?.font = .systemFont(ofSize: 12)
+            cell.textField?.textColor = .secondaryLabelColor
         case "type":
             cell.textField?.stringValue = record.profileType ?? "-"
             cell.textField?.font = .systemFont(ofSize: 12)
@@ -1291,18 +1626,25 @@ extension MainViewController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
-        guard let descriptor = tableView.sortDescriptors.first else { return }
+        guard let descriptor = tableView.sortDescriptors.first else {
+            activeTableSortDescriptor = nil
+            return
+        }
+
+        activeTableSortDescriptor = descriptor
+        let preservedPaths = selectedPaths
+        applyActiveTableSorting()
+        tableView.reloadData()
+        restoreSelection(for: preservedPaths)
+
         switch descriptor.key {
         case "name":
             sortPopUp.selectItem(at: ProfileSort.allCases.firstIndex(of: .nameAscending) ?? 0)
-            context.repository.setSort(.nameAscending)
-        case "teamName":
+        case "team":
             sortPopUp.selectItem(at: ProfileSort.allCases.firstIndex(of: .teamAscending) ?? 0)
-            context.repository.setSort(.teamAscending)
-        case "expirationDate":
+        case "expires":
             let sort: ProfileSort = descriptor.ascending ? .expirationAscending : .expirationDescending
             sortPopUp.selectItem(at: ProfileSort.allCases.firstIndex(of: sort) ?? 0)
-            context.repository.setSort(sort)
         default:
             break
         }
@@ -1451,6 +1793,38 @@ extension MainViewController {
     var debugSearchField: NSSearchField { searchField }
     var debugStatusLabel: NSTextField { statusLabel }
     var debugProgressIndicator: NSProgressIndicator { progressIndicator }
+    var debugCurrentProfilePaths: [String] { currentProfiles.map(\.path) }
+    var debugSelectedProfilePaths: [String] { selectedRecords().map(\.path) }
+    var debugLastRequestedVisibleRow: Int? { lastRequestedVisibleRow }
+    var debugVisibleRowRange: NSRange {
+        view.layoutSubtreeIfNeeded()
+        splitView.layoutSubtreeIfNeeded()
+        tableContainer.layoutSubtreeIfNeeded()
+        tableScrollView.layoutSubtreeIfNeeded()
+        tableView.layoutSubtreeIfNeeded()
+
+        let rowCount = tableView.numberOfRows
+        guard rowCount > 0 else { return NSRange(location: 0, length: 0) }
+
+        let clipView = tableScrollView.contentView
+        let visibleRect = tableView.convert(clipView.bounds, from: clipView)
+        let visibleRows = tableView.rows(in: visibleRect)
+        if visibleRows.length > 0 {
+            return visibleRows
+        }
+
+        let visibleHeight = max(clipView.bounds.height, tableScrollView.contentSize.height)
+        guard visibleHeight > 0 else {
+            return tableView.rows(in: tableView.visibleRect)
+        }
+
+        let firstRow = max(0, min(rowCount - 1, Int(floor(visibleRect.minY / tableView.rowHeight))))
+        let visibleRowCount = max(1, Int(ceil(visibleHeight / tableView.rowHeight)))
+        return NSRange(location: firstRow, length: min(visibleRowCount, rowCount - firstRow))
+    }
+    var debugNameColumnMinWidth: CGFloat {
+        tableView.tableColumns.first(where: { $0.identifier.rawValue == "name" })?.minWidth ?? 0
+    }
 
     func debugApplySnapshot(_ snapshot: RepositorySnapshot) {
         applySnapshot(snapshot)

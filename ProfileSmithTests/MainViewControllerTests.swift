@@ -341,6 +341,15 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
+    func htmlPreviewViewDisablesReloadMenuAction() {
+        let previewView = HTMLPreviewView(frame: NSRect(x: 0, y: 0, width: 480, height: 320))
+        previewView.loadHTMLString("<html><body><h1>Preview</h1></body></html>", baseURL: nil)
+
+        #expect(previewView.debugReloadActionEnabled == false)
+    }
+
+    @MainActor
+    @Test
     func mainTableAndPreviewWindowSupportCopyingSelectedRows() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
@@ -409,6 +418,201 @@ struct MainViewControllerTests {
         previewController.debugCopyProfileSelection()
         let profileCopy = NSPasteboard.general.string(forType: .string) ?? ""
         #expect(!profileCopy.isEmpty)
+    }
+
+    @MainActor
+    @Test
+    func externalOpenRevealsExistingOrImportedProfilesAndScrollsSelectionIntoView() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let inboxDirectory = try temporaryDirectory.makeDirectory(named: "Inbox")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        var existingProfileURLs: [URL] = []
+        for index in 0..<8 {
+            let url = try TestFixtureFactory.writeProfile(
+                to: scanDirectory,
+                fileName: String(format: "filler-%02d", index),
+                name: String(format: "Filler %02d", index),
+                uuid: String(format: "FILLER-%02d-AAAA-BBBB-CCCC", index),
+                teamName: "Scroll Team",
+                teamIdentifier: "SCROLL1234",
+                bundleIdentifier: String(format: "com.example.filler.%02d", index)
+            )
+            existingProfileURLs.append(url)
+        }
+
+        let existingURL = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "existing-target",
+            name: "Existing Target",
+            uuid: "EXISTING-TARGET-AAAA-BBBB-CCCC",
+            teamName: "Scroll Team",
+            teamIdentifier: "SCROLL1234",
+            bundleIdentifier: "com.example.existing"
+        )
+        existingProfileURLs.append(existingURL)
+        let importedSourceURL = try TestFixtureFactory.writeProfile(
+            to: inboxDirectory,
+            fileName: "zzz-imported",
+            name: "ZZZ Imported",
+            uuid: "IMPORTED-TARGET-AAAA-BBBB-CCCC",
+            teamName: "Scroll Team",
+            teamIdentifier: "SCROLL1234",
+            bundleIdentifier: "com.example.imported"
+        )
+        let expectedImportedURL = scanDirectory
+            .appendingPathComponent("IMPORTED-TARGET-AAAA-BBBB-CCCC", isDirectory: false)
+            .appendingPathExtension("mobileprovision")
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let controller = MainViewController(context: context)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 280),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.loadViewIfNeeded()
+        window.makeKeyAndOrderFront(nil)
+
+        let parser = MobileProvisionParser()
+        let sourceLocation = ScanLocation(kind: .custom, url: scanDirectory, displayName: "Profiles")
+        let existingRecords = try existingProfileURLs.map { url in
+            try parser.parseProfile(at: url, sourceLocation: sourceLocation).record
+        }
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: existingRecords,
+                metrics: ProfileMetrics(totalCount: existingRecords.count, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        controller.handleExternalFiles([existingURL])
+        try waitUntil(
+            timeout: 8,
+            description: "existing profile was selected from external open",
+            debugState: { "selection=\(controller.debugSelectedProfilePaths)" }
+        ) {
+            controller.debugSelectedProfilePaths == [existingURL.path]
+        }
+
+        controller.handleExternalFiles([importedSourceURL])
+        try waitUntil(
+            timeout: 8,
+            description: "imported profile file exists after external open"
+        ) {
+            FileManager.default.fileExists(atPath: expectedImportedURL.path)
+        }
+
+        let importedRecord = try parser.parseProfile(at: expectedImportedURL, sourceLocation: sourceLocation).record
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: existingRecords + [importedRecord],
+                metrics: ProfileMetrics(totalCount: existingRecords.count + 1, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        try waitUntil(
+            timeout: 8,
+            description: "imported profile was selected from external open",
+            debugState: {
+                "selection=\(controller.debugSelectedProfilePaths) rows=\(controller.debugTableView.numberOfRows)"
+            }
+        ) {
+            controller.debugSelectedProfilePaths == [expectedImportedURL.path]
+        }
+
+        try waitUntil(
+            timeout: 8,
+            description: "selected imported profile row requested scroll into view",
+            debugState: {
+                "selectedRow=\(controller.debugTableView.selectedRow) requestedRow=\(String(describing: controller.debugLastRequestedVisibleRow))"
+            }
+        ) {
+            controller.debugLastRequestedVisibleRow == controller.debugTableView.selectedRow
+        }
+    }
+
+    @MainActor
+    @Test
+    func tableColumnsIncludePlatformAndHeaderSortCanReverseNameAndBundleOrder() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let alphaRecord = TestFixtureFactory.makeRecord(
+            path: "/tmp/alpha.mobileprovision",
+            name: "Alpha",
+            teamName: "Sort Team",
+            bundleIdentifier: "com.example.alpha",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 50,
+            expirationDate: 1_900_000_000
+        )
+        let betaRecord = TestFixtureFactory.makeRecord(
+            path: "/tmp/beta.mobileprovision",
+            name: "Beta",
+            teamName: "Sort Team",
+            bundleIdentifier: "com.example.zeta",
+            profileType: "Distribution (App Store)",
+            profilePlatform: "Mac",
+            isExpired: false,
+            daysUntilExpiration: 50,
+            expirationDate: 1_900_000_100
+        )
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [betaRecord, alphaRecord],
+                metrics: ProfileMetrics(totalCount: 2, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        #expect(controller.debugTableView.tableColumns.map(\.identifier.rawValue).contains("platform"))
+        #expect(controller.debugTableView.tableColumns.last?.title == "状态")
+        #expect(abs(controller.splitView(controller.debugSplitView, constrainMinCoordinate: 0, ofSubviewAt: 0) - controller.debugNameColumnMinWidth) < 0.1)
+
+        controller.debugTableView.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+        controller.tableView(controller.debugTableView, sortDescriptorsDidChange: [])
+        #expect(controller.debugCurrentProfilePaths == [alphaRecord.path, betaRecord.path])
+
+        controller.debugTableView.sortDescriptors = [NSSortDescriptor(key: "name", ascending: false)]
+        controller.tableView(controller.debugTableView, sortDescriptorsDidChange: [])
+        #expect(controller.debugCurrentProfilePaths == [betaRecord.path, alphaRecord.path])
+
+        controller.debugTableView.sortDescriptors = [NSSortDescriptor(key: "bundle", ascending: false)]
+        controller.tableView(controller.debugTableView, sortDescriptorsDidChange: [])
+        #expect(controller.debugCurrentProfilePaths == [betaRecord.path, alphaRecord.path])
     }
 }
 

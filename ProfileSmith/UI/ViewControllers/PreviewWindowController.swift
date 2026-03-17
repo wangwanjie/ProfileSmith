@@ -558,8 +558,56 @@ private final class CopyableOutlineView: NSOutlineView {
     }
 }
 
+private final class PreviewWebView: WKWebView {
+    init() {
+        super.init(frame: .zero, configuration: Self.makeConfiguration())
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        nil
+    }
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        menu.removeAllItems()
+    }
+
+    @objc override func reload(_ sender: Any?) {}
+
+    @objc override func reloadFromOrigin(_ sender: Any?) {}
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(reload(_:)) || item.action == #selector(reloadFromOrigin(_:)) {
+            return false
+        }
+
+        return super.validateUserInterfaceItem(item)
+    }
+
+    private static func makeConfiguration() -> WKWebViewConfiguration {
+        let configuration = WKWebViewConfiguration()
+        let userContentController = WKUserContentController()
+        let disableContextMenuScript = WKUserScript(
+            source: """
+            document.addEventListener('contextmenu', function(event) {
+                event.preventDefault();
+            }, true);
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        userContentController.addUserScript(disableContextMenuScript)
+        configuration.userContentController = userContentController
+        return configuration
+    }
+}
+
 final class HTMLPreviewView: NSView {
-    private let webView = WKWebView(frame: .zero)
+    private let webView = PreviewWebView()
     #if DEBUG
     private var debugPlainTextStorage = ""
     #endif
@@ -613,5 +661,21 @@ final class HTMLPreviewView: NSView {
     var debugPlainText: String {
         debugPlainTextStorage
     }
+
+    var debugReloadActionEnabled: Bool {
+        webView.validateUserInterfaceItem(DebugValidatedUserInterfaceItem(action: #selector(PreviewWebView.reload(_:))))
+    }
     #endif
 }
+
+#if DEBUG
+private final class DebugValidatedUserInterfaceItem: NSObject, NSValidatedUserInterfaceItem {
+    let action: Selector?
+
+    init(action: Selector?) {
+        self.action = action
+    }
+
+    var tag: Int { 0 }
+}
+#endif

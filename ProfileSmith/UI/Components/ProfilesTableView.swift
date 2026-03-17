@@ -1,5 +1,22 @@
 import Cocoa
 
+final class TrailingBorderlessTableHeaderCell: NSTableHeaderCell {
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        super.draw(withFrame: cellFrame, in: controlView)
+
+        let separatorRect = NSRect(
+            x: max(cellFrame.minX, cellFrame.maxX - 1),
+            y: cellFrame.minY,
+            width: min(1, cellFrame.width),
+            height: cellFrame.height
+        )
+        guard separatorRect.width > 0 else { return }
+
+        NSColor.controlBackgroundColor.setFill()
+        separatorRect.fill()
+    }
+}
+
 final class ProfilesTableView: NSTableView {
     var quickLookHandler: (() -> Void)?
     var copyHandler: (() -> Void)?

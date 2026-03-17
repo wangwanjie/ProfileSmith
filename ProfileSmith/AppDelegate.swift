@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !urls.isEmpty else { return }
         openMainWindow(nil)
         mainWindowController?.contentController.handleExternalFiles(urls)
+        activateAppBringingAllWindowsForward()
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
@@ -131,12 +132,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindowController.window?.makeKey()
         mainWindowController.window?.makeKeyAndOrderFront(sender)
         mainWindowController.window?.orderFrontRegardless()
+        activateAppBringingAllWindowsForward()
+    }
+
+    private func activateAppBringingAllWindowsForward() {
+        NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
     }
 
     private func presentFatalError(_ error: Error) {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        activateAppBringingAllWindowsForward()
         let alert = NSAlert(error: error)
         alert.messageText = "ProfileSmith 启动失败"
         alert.informativeText = error.localizedDescription
