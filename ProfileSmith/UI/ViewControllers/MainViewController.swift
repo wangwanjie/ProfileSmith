@@ -20,6 +20,7 @@ final class MainViewController: NSViewController {
     private var lastRequestedVisibleRow: Int?
     #if DEBUG
     private(set) var didOpenPreviewFromTableDoubleAction = false
+    private(set) var localizationTableReloadCount = 0
     #endif
 
     private let filterPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -80,6 +81,9 @@ final class MainViewController: NSViewController {
     private lazy var rootDropView: DropHostingView = {
         let view = DropHostingView()
         view.delegate = self
+        view.onEffectiveAppearanceChange = { [weak self] in
+            self?.updateAppearanceColors()
+        }
         return view
     }()
 
@@ -119,6 +123,7 @@ final class MainViewController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
+        updateAppearanceColors()
         if ProcessInfo.processInfo.environment["PROFILESMITH_UI_TEST"] == "1" {
             view.window?.makeFirstResponder(searchField)
         }
@@ -166,7 +171,7 @@ final class MainViewController: NSViewController {
 
     private func buildUI() {
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        updateAppearanceColors()
 
         let topBar = NSVisualEffectView()
         topBar.material = .headerView
@@ -190,7 +195,6 @@ final class MainViewController: NSViewController {
         progressIndicator.setAccessibilityIdentifier("main.progressIndicator")
 
         loadingOverlay.wantsLayer = true
-        loadingOverlay.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
         loadingOverlay.isHidden = true
         loadingOverlay.setAccessibilityIdentifier("main.loadingOverlay")
 
@@ -317,6 +321,8 @@ final class MainViewController: NSViewController {
             make.leading.trailing.equalToSuperview().inset(16)
             make.bottom.equalToSuperview().offset(-10)
         }
+
+        updateAppearanceColors()
     }
 
     private func buildTableArea() {
@@ -561,7 +567,20 @@ final class MainViewController: NSViewController {
         updateTableColumnTitles()
         updateInspectorColumnTitles()
         updatePluginButtonTitle()
+        #if DEBUG
+        localizationTableReloadCount += 1
+        #endif
+        tableView.reloadData()
         refreshLocalizedContent()
+    }
+
+    private func updateAppearanceColors() {
+        view.layer?.backgroundColor = resolvedCGColor(NSColor.windowBackgroundColor, appearance: view.effectiveAppearance)
+        loadingOverlay.layer?.backgroundColor = resolvedCGColor(
+            NSColor.windowBackgroundColor.withAlphaComponent(0.72),
+            appearance: view.effectiveAppearance
+        )
+        previewContentView.refreshAppearanceColors()
     }
 
     private func rebuildFilterPopUp() {
@@ -1915,6 +1934,11 @@ extension MainViewController {
     var debugSearchField: NSSearchField { searchField }
     var debugStatusLabel: NSTextField { statusLabel }
     var debugProgressIndicator: NSProgressIndicator { progressIndicator }
+    var debugMainBackgroundColor: NSColor? { view.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+    var debugLoadingOverlayBackgroundColor: NSColor? { loadingOverlay.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+    var debugPreviewBackgroundColor: NSColor? { previewContentView.debugBackgroundColor }
+    var debugPreviewEffectiveAppearance: NSAppearance { previewContentView.effectiveAppearance }
+    var debugLocalizationTableReloadCount: Int { localizationTableReloadCount }
     var debugCurrentProfilePaths: [String] { currentProfiles.map(\.path) }
     var debugSelectedProfilePaths: [String] { selectedRecords().map(\.path) }
     var debugLastRequestedVisibleRow: Int? { lastRequestedVisibleRow }
@@ -1983,3 +2007,11 @@ extension MainViewController {
     }
 }
 #endif
+
+private func resolvedCGColor(_ color: NSColor, appearance: NSAppearance) -> CGColor {
+    let previousAppearance = NSAppearance.current
+    NSAppearance.current = appearance
+    let resolvedColor = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
+    NSAppearance.current = previousAppearance
+    return resolvedColor
+}

@@ -9,8 +9,10 @@ private struct PreviewOverviewRow {
 }
 
 final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+    private static let defaultContentSize = NSSize(width: 980, height: 720)
     private let inspection: PreviewInspection
     private var cancellables = Set<AnyCancellable>()
+    private weak var contentRootView: AppearanceAwareContainerView?
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let segmentedControl = NSSegmentedControl(
@@ -37,8 +39,12 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         self.inspection = inspection
 
         let contentViewController = NSViewController()
+        let contentView = AppearanceAwareContainerView()
+        contentView.frame = NSRect(origin: .zero, size: Self.defaultContentSize)
+        contentView.autoresizingMask = [.width, .height]
+        contentViewController.view = contentView
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 980, height: 720),
+            contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -48,12 +54,19 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         window.contentViewController = contentViewController
         window.tabbingMode = .disallowed
         window.isReleasedWhenClosed = false
+        window.setContentSize(Self.defaultContentSize)
+        window.minSize = NSSize(width: 720, height: 520)
 
         super.init(window: window)
 
-        buildUI(in: contentViewController.view)
+        contentRootView = contentView
+        contentView.onEffectiveAppearanceChange = { [weak self] in
+            self?.updateAppearanceColors()
+        }
+        buildUI(in: contentView)
         configure()
         bindLocalization()
+        updateAppearanceColors()
     }
 
     @available(*, unavailable)
@@ -63,7 +76,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
 
     private func buildUI(in view: NSView) {
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        updateAppearanceColors()
 
         titleLabel.font = NSFont(name: "Avenir Next Demi Bold", size: 28) ?? .systemFont(ofSize: 28, weight: .semibold)
         subtitleLabel.font = .systemFont(ofSize: 12)
@@ -199,6 +212,11 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         overviewTableView.reloadData()
         profileOutlineView.reloadData()
         infoOutlineView.reloadData()
+    }
+
+    private func updateAppearanceColors() {
+        guard let contentRootView else { return }
+        contentRootView.layer?.backgroundColor = resolvedCGColor(NSColor.windowBackgroundColor, appearance: contentRootView.effectiveAppearance)
     }
 
     @objc private func segmentChanged(_ sender: Any?) {
@@ -502,6 +520,12 @@ extension PreviewWindowController {
     var debugInfoOutlineView: NSOutlineView { infoOutlineView }
     var debugOverviewRows: [String] { overviewRows.map { "\($0.key): \($0.value)" } }
     var debugTitleLabel: NSTextField { titleLabel }
+    var debugBackgroundColor: NSColor? { contentRootView?.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+    var debugEffectiveAppearance: NSAppearance { contentRootView?.effectiveAppearance ?? NSAppearance.current }
+    var debugWindowContentRect: NSRect { window?.contentLayoutRect ?? .zero }
+    var debugRootViewFrame: NSRect { contentRootView?.frame ?? .zero }
+    var debugTabViewFrame: NSRect { tabView.frame }
+    var debugSelectedTabContentFrame: NSRect { tabView.selectedTabViewItem?.view?.frame ?? .zero }
 
     func debugSelectSegment(_ index: Int) {
         segmentedControl.selectedSegment = index
@@ -525,6 +549,20 @@ extension PreviewWindowController {
     }
 }
 #endif
+
+private final class AppearanceAwareContainerView: NSView {
+    var onEffectiveAppearanceChange: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onEffectiveAppearanceChange?()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChange?()
+    }
+}
 
 private final class CopyableTableView: NSTableView {
     var copyHandler: (() -> Void)?
@@ -649,13 +687,21 @@ final class HTMLPreviewView: NSView {
         webView.loadHTMLString(html, baseURL: baseURL)
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        refreshAppearanceColors()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearanceColors()
+    }
+
     private func buildUI() {
         wantsLayer = true
         layer?.cornerRadius = 8
         layer?.masksToBounds = true
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.75).cgColor
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
 
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsMagnification = false
@@ -664,6 +710,13 @@ final class HTMLPreviewView: NSView {
         webView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
+
+        refreshAppearanceColors()
+    }
+
+    func refreshAppearanceColors() {
+        layer?.borderColor = resolvedCGColor(NSColor.separatorColor.withAlphaComponent(0.75), appearance: effectiveAppearance)
+        layer?.backgroundColor = resolvedCGColor(NSColor.controlBackgroundColor, appearance: effectiveAppearance)
     }
 
     private static func plainText(from html: String) -> String {
@@ -685,7 +738,19 @@ final class HTMLPreviewView: NSView {
     var debugReloadActionEnabled: Bool {
         webView.validateUserInterfaceItem(DebugValidatedUserInterfaceItem(action: #selector(PreviewWebView.reload(_:))))
     }
+
+    var debugBackgroundColor: NSColor? {
+        layer?.backgroundColor.flatMap(NSColor.init(cgColor:))
+    }
     #endif
+}
+
+private func resolvedCGColor(_ color: NSColor, appearance: NSAppearance) -> CGColor {
+    let previousAppearance = NSAppearance.current
+    NSAppearance.current = appearance
+    let resolvedColor = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
+    NSAppearance.current = previousAppearance
+    return resolvedColor
 }
 
 #if DEBUG

@@ -664,6 +664,228 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
+    func visibleTypeAndStatusCellsRefreshWhenLanguageChanges() throws {
+        let originalLanguage = AppLocalization.shared.language
+        defer {
+            AppLocalization.shared.setLanguage(originalLanguage)
+        }
+
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        AppLocalization.shared.setLanguage(.simplifiedChinese)
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let expirationDate = Date().addingTimeInterval((12 * 86_400) + 1_800)
+        let record = TestFixtureFactory.makeRecord(
+            path: "/tmp/runtime-language.mobileprovision",
+            name: "Runtime Language",
+            teamName: "Runtime Team",
+            bundleIdentifier: "com.example.runtime.language",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 20,
+            expirationDate: expirationDate.timeIntervalSince1970
+        )
+
+        let controller = MainViewController(context: context)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.loadViewIfNeeded()
+        window.makeKeyAndOrderFront(nil)
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [record],
+                metrics: ProfileMetrics(totalCount: 1, expiredCount: 0, expiringSoonCount: 1),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        let initialReloadCount = controller.debugLocalizationTableReloadCount
+        let typeColumn = try #require(controller.debugTableView.tableColumns.first(where: { $0.identifier.rawValue == "type" }))
+        let statusColumn = try #require(controller.debugTableView.tableColumns.first(where: { $0.identifier.rawValue == "status" }))
+        let initialTypeCell = try #require(controller.tableView(controller.debugTableView, viewFor: typeColumn, row: 0) as? NSTableCellView)
+        let initialStatusCell = try #require(controller.tableView(controller.debugTableView, viewFor: statusColumn, row: 0) as? NSTableCellView)
+
+        #expect(initialTypeCell.textField?.stringValue == L10n.localizedProfileType(record.profileType))
+        #expect(initialStatusCell.textField?.stringValue == record.statusText)
+
+        AppLocalization.shared.setLanguage(.english)
+
+        let expectedType = L10n.localizedProfileType(record.profileType)
+        let expectedStatus = record.statusText
+        try waitUntil(
+            description: "row localization updated after runtime language switch",
+            debugState: {
+                [
+                    "reloads=\(controller.debugLocalizationTableReloadCount)",
+                    (controller.tableView(controller.debugTableView, viewFor: typeColumn, row: 0) as? NSTableCellView)?.textField?.stringValue ?? "<nil>",
+                    (controller.tableView(controller.debugTableView, viewFor: statusColumn, row: 0) as? NSTableCellView)?.textField?.stringValue ?? "<nil>",
+                ].joined(separator: " | ")
+            }
+        ) {
+            controller.debugLocalizationTableReloadCount > initialReloadCount
+                && (controller.tableView(controller.debugTableView, viewFor: typeColumn, row: 0) as? NSTableCellView)?.textField?.stringValue == expectedType
+                && (controller.tableView(controller.debugTableView, viewFor: statusColumn, row: 0) as? NSTableCellView)?.textField?.stringValue == expectedStatus
+        }
+    }
+
+    @MainActor
+    @Test
+    func mainViewAndEmbeddedPreviewReapplyResolvedBackgroundColorsWhenAppearanceChanges() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let controller = MainViewController(context: context)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = controller
+        controller.loadViewIfNeeded()
+        window.makeKeyAndOrderFront(nil)
+
+        window.appearance = NSAppearance(named: .darkAqua)
+        try waitUntil(
+            description: "dark appearance applied to main view backgrounds",
+            debugState: {
+                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor)) preview=\(String(describing: controller.debugPreviewBackgroundColor))"
+            }
+        ) {
+            colorsMatch(controller.debugMainBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugLoadingOverlayBackgroundColor, expected: NSColor.windowBackgroundColor.withAlphaComponent(0.72), appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugPreviewBackgroundColor, expected: NSColor.controlBackgroundColor, appearance: controller.debugPreviewEffectiveAppearance)
+        }
+
+        window.appearance = NSAppearance(named: .aqua)
+        try waitUntil(
+            description: "light appearance applied to main view backgrounds",
+            debugState: {
+                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor)) preview=\(String(describing: controller.debugPreviewBackgroundColor))"
+            }
+        ) {
+            colorsMatch(controller.debugMainBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugLoadingOverlayBackgroundColor, expected: NSColor.windowBackgroundColor.withAlphaComponent(0.72), appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugPreviewBackgroundColor, expected: NSColor.controlBackgroundColor, appearance: controller.debugPreviewEffectiveAppearance)
+        }
+    }
+
+    @MainActor
+    @Test
+    func previewWindowReappliesResolvedBackgroundColorsWhenAppearanceChanges() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "preview-appearance",
+            name: "Preview Appearance",
+            uuid: "PREVIEW-APPEARANCE-AAAA-BBBB",
+            teamName: "Preview Team",
+            teamIdentifier: "PREV1234",
+            bundleIdentifier: "com.example.preview.appearance"
+        )
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewAppearanceHost",
+            displayName: "Preview Appearance Host",
+            bundleIdentifier: "com.example.preview.appearance.host",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let controller = PreviewWindowController(inspection: inspection)
+        let window = try #require(controller.window)
+        window.makeKeyAndOrderFront(nil)
+
+        window.appearance = NSAppearance(named: .darkAqua)
+        try waitUntil(
+            description: "preview window dark background applied",
+            debugState: { "background=\(String(describing: controller.debugBackgroundColor))" }
+        ) {
+            colorsMatch(controller.debugBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.debugEffectiveAppearance)
+        }
+
+        window.appearance = NSAppearance(named: .aqua)
+        try waitUntil(
+            description: "preview window light background applied",
+            debugState: { "background=\(String(describing: controller.debugBackgroundColor))" }
+        ) {
+            colorsMatch(controller.debugBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.debugEffectiveAppearance)
+        }
+    }
+
+    @MainActor
+    @Test
+    func previewWindowShowsContentAreaAtInitialWindowSize() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "preview-layout",
+            name: "Preview Layout",
+            uuid: "PREVIEW-LAYOUT-AAAA-BBBB",
+            teamName: "Preview Team",
+            teamIdentifier: "PREV1234",
+            bundleIdentifier: "com.example.preview.layout"
+        )
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewLayoutHost",
+            displayName: "Preview Layout Host",
+            bundleIdentifier: "com.example.preview.layout.host",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let controller = PreviewWindowController(inspection: inspection)
+        let window = try #require(controller.window)
+        window.makeKeyAndOrderFront(nil)
+
+        try waitUntil(
+            description: "preview window content area expanded on first display",
+            debugState: {
+                "content=\(controller.debugWindowContentRect) root=\(controller.debugRootViewFrame) tab=\(controller.debugTabViewFrame) selected=\(controller.debugSelectedTabContentFrame)"
+            }
+        ) {
+            controller.debugWindowContentRect.height > 600
+                && controller.debugRootViewFrame.height > 600
+                && controller.debugTabViewFrame.height > 300
+                && controller.debugSelectedTabContentFrame.height > 250
+        }
+    }
+
+    @MainActor
+    @Test
     func tableHeaderDoubleClickDoesNotTriggerPreviewOpening() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
@@ -709,6 +931,20 @@ struct MainViewControllerTests {
         controller.debugHandleTableDoubleAction(clickedRow: -1, clickedColumn: 0)
         #expect(controller.debugDidOpenPreviewFromTableDoubleAction == false)
     }
+}
+
+private func colorsMatch(_ actual: NSColor?, expected: NSColor, appearance: NSAppearance) -> Bool {
+    guard let actual = actual?.usingColorSpace(.deviceRGB) else { return false }
+    let previousAppearance = NSAppearance.current
+    NSAppearance.current = appearance
+    let resolved = expected.usingColorSpace(.deviceRGB)
+    NSAppearance.current = previousAppearance
+    guard let resolved else { return false }
+
+    return abs(actual.redComponent - resolved.redComponent) < 0.01
+        && abs(actual.greenComponent - resolved.greenComponent) < 0.01
+        && abs(actual.blueComponent - resolved.blueComponent) < 0.01
+        && abs(actual.alphaComponent - resolved.alphaComponent) < 0.01
 }
 
 @MainActor

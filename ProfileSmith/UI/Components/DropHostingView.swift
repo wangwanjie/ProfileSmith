@@ -6,6 +6,7 @@ protocol DropHostingViewDelegate: AnyObject {
 
 final class DropHostingView: NSView {
     weak var delegate: DropHostingViewDelegate?
+    var onEffectiveAppearanceChange: (() -> Void)?
 
     private var isDropTargeted = false {
         didSet {
@@ -65,6 +66,16 @@ final class DropHostingView: NSView {
         guard !urls.isEmpty else { return false }
         delegate?.dropHostingView(self, didReceiveFileURLs: urls)
         return true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onEffectiveAppearanceChange?()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChange?()
     }
 
     private func extractFileURLs(from draggingInfo: NSDraggingInfo) -> [URL] {

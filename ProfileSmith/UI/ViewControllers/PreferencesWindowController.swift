@@ -59,6 +59,22 @@ final class PreferencesWindowController: NSWindowController {
         preferencesViewController.debugAppearancePopup
     }
 
+    var debugCheckForUpdatesButtonTitle: String {
+        preferencesViewController.debugCheckForUpdatesButtonTitle
+    }
+
+    var debugOpenGitHubButtonTitle: String {
+        preferencesViewController.debugOpenGitHubButtonTitle
+    }
+
+    var debugCardBackgroundColor: NSColor? {
+        preferencesViewController.debugCardBackgroundColor
+    }
+
+    var debugEffectiveAppearance: NSAppearance {
+        preferencesViewController.view.effectiveAppearance
+    }
+
     private var preferencesViewController: PreferencesViewController {
         window?.contentViewController as! PreferencesViewController
     }
@@ -92,6 +108,8 @@ final class PreferencesViewController: NSViewController {
     private var automaticDownloadsCheckbox: NSButton!
     private var automaticDownloadsHintLabel: NSTextField!
     private var versionLabel: NSTextField!
+    private var checkNowButton: NSButton!
+    private var openGitHubButton: NSButton!
 
     init(updateManager: UpdateManager, settings: AppSettings) {
         self.updateManager = updateManager
@@ -105,7 +123,11 @@ final class PreferencesViewController: NSViewController {
     }
 
     override func loadView() {
-        view = NSView()
+        let appearanceAwareView = AppearanceAwareView()
+        appearanceAwareView.onEffectiveAppearanceChange = { [weak self] in
+            self?.updateAppearanceColors()
+        }
+        view = appearanceAwareView
         buildUI()
     }
 
@@ -114,6 +136,7 @@ final class PreferencesViewController: NSViewController {
         bindSettings()
         applyLocalization()
         syncControlsFromSettings()
+        updateAppearanceColors()
     }
 
     private func buildUI() {
@@ -123,9 +146,7 @@ final class PreferencesViewController: NSViewController {
 
         card.wantsLayer = true
         card.layer?.cornerRadius = 14
-        card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor.separatorColor.cgColor
         sectionControl.segmentStyle = .rounded
         sectionControl.selectedSegment = selectedPane.rawValue
         sectionControl.target = self
@@ -246,9 +267,16 @@ final class PreferencesViewController: NSViewController {
         appearanceTitleLabel.stringValue = L10n.preferencesAppearance
         updateChecksTitleLabel.stringValue = L10n.preferencesUpdateChecks
         automaticDownloadsCheckbox.title = L10n.preferencesAutoDownloads
+        checkNowButton.title = L10n.preferencesCheckForUpdates
+        openGitHubButton.title = L10n.preferencesOpenGitHub
         rebuildLanguagePopup()
         rebuildAppearancePopup()
         rebuildUpdateStrategyPopup()
+    }
+
+    private func updateAppearanceColors() {
+        card.layer?.backgroundColor = resolvedCGColor(NSColor.controlBackgroundColor, appearance: view.effectiveAppearance)
+        card.layer?.borderColor = resolvedCGColor(NSColor.separatorColor, appearance: view.effectiveAppearance)
     }
 
     private func makeLabeledRow(titleLabel: NSTextField, control: NSView) -> NSView {
@@ -306,8 +334,8 @@ final class PreferencesViewController: NSViewController {
     }
 
     private func makeActionsRow() -> NSView {
-        let checkNowButton = NSButton(title: L10n.preferencesCheckForUpdates, target: self, action: #selector(checkForUpdates(_:)))
-        let openGitHubButton = NSButton(title: L10n.preferencesOpenGitHub, target: self, action: #selector(openGitHubHomepage(_:)))
+        checkNowButton = NSButton(title: L10n.preferencesCheckForUpdates, target: self, action: #selector(checkForUpdates(_:)))
+        openGitHubButton = NSButton(title: L10n.preferencesOpenGitHub, target: self, action: #selector(openGitHubHomepage(_:)))
 
         let buttons = NSStackView(views: [checkNowButton, openGitHubButton])
         buttons.orientation = .horizontal
@@ -403,4 +431,29 @@ final class PreferencesViewController: NSViewController {
 
     var debugLanguagePopup: NSPopUpButton { languagePopup }
     var debugAppearancePopup: NSPopUpButton { appearancePopup }
+    var debugCheckForUpdatesButtonTitle: String { checkNowButton.title }
+    var debugOpenGitHubButtonTitle: String { openGitHubButton.title }
+    var debugCardBackgroundColor: NSColor? { card.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+}
+
+private func resolvedCGColor(_ color: NSColor, appearance: NSAppearance) -> CGColor {
+    let previousAppearance = NSAppearance.current
+    NSAppearance.current = appearance
+    let resolvedColor = color.usingColorSpace(.deviceRGB)?.cgColor ?? color.cgColor
+    NSAppearance.current = previousAppearance
+    return resolvedColor
+}
+
+private final class AppearanceAwareView: NSView {
+    var onEffectiveAppearanceChange: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onEffectiveAppearanceChange?()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChange?()
+    }
 }
