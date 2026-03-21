@@ -66,15 +66,16 @@ final class ProfileDatabase {
 
     func fetchProfiles(query: ProfileQuery) throws -> [ProfileRecord] {
         try dbQueue.read { db in
-            let predicate = makeFilterClause(for: query.filter)
-            let orderBy = makeOrderClause(for: query.sort)
+            let expirationExpressions = makeExpirationExpressions(referenceDate: Date())
+            let predicate = makeFilterClause(for: query.filter, expirationExpressions: expirationExpressions)
+            let orderBy = makeOrderClause(for: query.sort, expirationExpressions: expirationExpressions)
+            let selectClause = makeProfileSelectClause(expirationExpressions: expirationExpressions)
 
             if query.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return try ProfileRecord.fetchAll(
                     db,
                     sql: """
-                    SELECT *
-                    FROM profiles
+                    \(selectClause)
                     \(predicate.clause)
                     \(orderBy)
                     """,
@@ -88,8 +89,7 @@ final class ProfileDatabase {
                     return try ProfileRecord.fetchAll(
                         db,
                         sql: """
-                        SELECT profiles.*
-                        FROM profiles
+                        \(selectClause)
                         JOIN profile_search ON profile_search.path = profiles.path
                         WHERE profile_search MATCH ?
                         \(predicate.andClause)
@@ -105,8 +105,7 @@ final class ProfileDatabase {
             return try ProfileRecord.fetchAll(
                 db,
                 sql: """
-                SELECT *
-                FROM profiles
+                \(selectClause)
                 WHERE LOWER(searchText) LIKE ?
                 \(predicate.andClause)
                 \(orderBy)
@@ -118,13 +117,14 @@ final class ProfileDatabase {
 
     func fetchMetrics() throws -> ProfileMetrics {
         try dbQueue.read { db in
+            let expirationExpressions = makeExpirationExpressions(referenceDate: Date())
             let row = try Row.fetchOne(
                 db,
                 sql: """
                 SELECT
                     COUNT(*) AS totalCount,
-                    SUM(CASE WHEN isExpired = 1 THEN 1 ELSE 0 END) AS expiredCount,
-                    SUM(CASE WHEN isExpired = 0 AND daysUntilExpiration BETWEEN 0 AND 30 THEN 1 ELSE 0 END) AS expiringSoonCount
+                    SUM(CASE WHEN \(expirationExpressions.isExpired) = 1 THEN 1 ELSE 0 END) AS expiredCount,
+                    SUM(CASE WHEN \(expirationExpressions.isExpired) = 0 AND \(expirationExpressions.daysUntilExpiration) BETWEEN 0 AND 30 THEN 1 ELSE 0 END) AS expiringSoonCount
                 FROM profiles
                 """
             )
@@ -190,14 +190,19 @@ final class ProfileDatabase {
         return migrator
     }
 
-    private func makeFilterClause(for filter: ProfileFilter) -> (clause: String, andClause: String, arguments: StatementArguments) {
+    private func makeFilterClause(
+        for filter: ProfileFilter,
+        expirationExpressions: (isExpired: String, daysUntilExpiration: String)
+    ) -> (clause: String, andClause: String, arguments: StatementArguments) {
         switch filter {
         case .all:
             return ("", "", [])
         case .expiringSoon:
-            return ("WHERE profiles.isExpired = 0 AND profiles.daysUntilExpiration BETWEEN 0 AND 30", "AND profiles.isExpired = 0 AND profiles.daysUntilExpiration BETWEEN 0 AND 30", [])
+            let clause = "\(expirationExpressions.isExpired) = 0 AND \(expirationExpressions.daysUntilExpiration) BETWEEN 0 AND 30"
+            return ("WHERE \(clause)", "AND \(clause)", [])
         case .expired:
-            return ("WHERE profiles.isExpired = 1", "AND profiles.isExpired = 1", [])
+            let clause = "\(expirationExpressions.isExpired) = 1"
+            return ("WHERE \(clause)", "AND \(clause)", [])
         case .development:
             return ("WHERE profiles.profileType = ?", "AND profiles.profileType = ?", ["Development"])
         case .distribution:
@@ -209,12 +214,15 @@ final class ProfileDatabase {
         }
     }
 
-    private func makeOrderClause(for sort: ProfileSort) -> String {
+    private func makeOrderClause(
+        for sort: ProfileSort,
+        expirationExpressions: (isExpired: String, daysUntilExpiration: String)
+    ) -> String {
         switch sort {
         case .expirationAscending:
-            return "ORDER BY profiles.isExpired ASC, profiles.expirationDate ASC, LOWER(profiles.name) ASC"
+            return "ORDER BY \(expirationExpressions.isExpired) ASC, profiles.expirationDate ASC, LOWER(profiles.name) ASC"
         case .expirationDescending:
-            return "ORDER BY profiles.isExpired ASC, profiles.expirationDate DESC, LOWER(profiles.name) ASC"
+            return "ORDER BY \(expirationExpressions.isExpired) ASC, profiles.expirationDate DESC, LOWER(profiles.name) ASC"
         case .nameAscending:
             return "ORDER BY LOWER(profiles.name) ASC, profiles.expirationDate ASC"
         case .teamAscending:
@@ -222,6 +230,68 @@ final class ProfileDatabase {
         case .modificationDescending:
             return "ORDER BY profiles.fileModificationTime DESC, LOWER(profiles.name) ASC"
         }
+    }
+
+    private func makeProfileSelectClause(expirationExpressions: (isExpired: String, daysUntilExpiration: String)) -> String {
+        let columns = [
+            "profiles.path",
+            "profiles.sourceKind",
+            "profiles.sourceName",
+            "profiles.fileName",
+            "profiles.fileExtension",
+            "profiles.fileSize",
+            "profiles.fileModificationTime",
+            "profiles.fileCreationTime",
+            "profiles.uuid",
+            "profiles.name",
+            "profiles.teamName",
+            "profiles.teamIdentifier",
+            "profiles.appIDName",
+            "profiles.applicationIdentifier",
+            "profiles.bundleIdentifier",
+            "profiles.applicationIdentifierPrefix",
+            "profiles.profilePlatform",
+            "profiles.profileType",
+            "\(expirationExpressions.isExpired) AS isExpired",
+            "\(expirationExpressions.daysUntilExpiration) AS daysUntilExpiration",
+            "profiles.creationDate",
+            "profiles.expirationDate",
+            "profiles.certificateCount",
+            "profiles.deviceCount",
+            "profiles.searchText",
+            "profiles.lastIndexedAt",
+        ].joined(separator: ",\n")
+
+        return """
+        SELECT
+        \(columns)
+        FROM profiles
+        """
+    }
+
+    private func makeExpirationExpressions(referenceDate: Date) -> (isExpired: String, daysUntilExpiration: String) {
+        let timestamp = String(format: "%.6f", referenceDate.timeIntervalSince1970)
+        let isExpired = """
+        CASE
+            WHEN profiles.expirationDate IS NOT NULL AND profiles.expirationDate < \(timestamp) THEN 1
+            ELSE 0
+        END
+        """
+        let daysUntilExpiration = """
+        CASE
+            WHEN profiles.expirationDate IS NULL THEN NULL
+            WHEN profiles.expirationDate < \(timestamp) THEN 0
+            ELSE MAX(
+                0,
+                CAST(
+                    julianday(date(profiles.expirationDate, 'unixepoch', 'localtime')) -
+                    julianday(date(\(timestamp), 'unixepoch', 'localtime'))
+                    AS INTEGER
+                )
+            )
+        END
+        """
+        return (isExpired, daysUntilExpiration)
     }
 
     private func makeFTSQuery(from searchText: String) -> String {

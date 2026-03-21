@@ -97,7 +97,7 @@ final class MobileProvisionParser {
         )
         let expirationDate = plist["ExpirationDate"] as? Date
         let isExpired = expirationDate.map { $0 < Date() } ?? false
-        let daysUntilExpiration = expirationDate.map(Self.daysUntilExpiration(for:))
+        let daysUntilExpiration = expirationDate.map { Self.daysUntilExpiration(for: $0) }
         let profileType = Self.profileType(from: plist, fileExtension: fileURL.pathExtension.lowercased())
         let platform = Self.profilePlatform(from: plist, fileExtension: fileURL.pathExtension.lowercased())
         let searchText = Self.flatten(value: plist)
@@ -189,9 +189,9 @@ final class MobileProvisionParser {
         return String(applicationIdentifier.dropFirst(prefix.count + 1))
     }
 
-    nonisolated static func daysUntilExpiration(for date: Date) -> Int {
+    nonisolated static func daysUntilExpiration(for date: Date, referenceDate: Date = Date()) -> Int {
         let calendar = Calendar(identifier: .gregorian)
-        let from = calendar.startOfDay(for: Date())
+        let from = calendar.startOfDay(for: referenceDate)
         let to = calendar.startOfDay(for: date)
         return max(0, calendar.dateComponents([.day], from: from, to: to).day ?? 0)
     }

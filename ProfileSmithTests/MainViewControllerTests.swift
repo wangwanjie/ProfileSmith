@@ -614,6 +614,100 @@ struct MainViewControllerTests {
         controller.tableView(controller.debugTableView, sortDescriptorsDidChange: [])
         #expect(controller.debugCurrentProfilePaths == [betaRecord.path, alphaRecord.path])
     }
+
+    @MainActor
+    @Test
+    func statusColumnRecalculatesRemainingDaysFromExpirationDate() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.appendingPathComponent("Profiles", isDirectory: true).path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let expirationDate = Date().addingTimeInterval((25 * 86_400) + 3_600)
+        let record = TestFixtureFactory.makeRecord(
+            path: "/tmp/status-recalc.mobileprovision",
+            name: "Status Recalc",
+            teamName: "Status Team",
+            bundleIdentifier: "com.example.status.recalc",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 28,
+            expirationDate: expirationDate.timeIntervalSince1970
+        )
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [record],
+                metrics: ProfileMetrics(totalCount: 1, expiredCount: 0, expiringSoonCount: 1),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        let statusColumn = try #require(controller.debugTableView.tableColumns.first(where: { $0.identifier.rawValue == "status" }))
+        let statusCell = try #require(controller.tableView(controller.debugTableView, viewFor: statusColumn, row: 0) as? NSTableCellView)
+        let expectedDays = MobileProvisionParser.daysUntilExpiration(for: expirationDate)
+        #expect(statusCell.textField?.stringValue == "\(expectedDays) 天内到期")
+    }
+
+    @MainActor
+    @Test
+    func tableHeaderDoubleClickDoesNotTriggerPreviewOpening() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let profileURL = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "double-click-header",
+            name: "Double Click Header",
+            uuid: "DOUBLE-CLICK-HEADER-AAAA-BBBB",
+            teamName: "Header Team",
+            teamIdentifier: "HEAD1234",
+            bundleIdentifier: "com.example.header"
+        )
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let parser = MobileProvisionParser()
+        let record = try parser.parseProfile(
+            at: profileURL,
+            sourceLocation: ScanLocation(kind: .custom, url: scanDirectory, displayName: "Tests")
+        ).record
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [record],
+                metrics: ProfileMetrics(totalCount: 1, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        controller.debugHandleTableDoubleAction(clickedRow: -1, clickedColumn: 0)
+        #expect(controller.debugDidOpenPreviewFromTableDoubleAction == false)
+    }
 }
 
 @MainActor

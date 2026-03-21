@@ -18,6 +18,9 @@ final class MainViewController: NSViewController {
     private var hasExpandedQueryForPendingReveal = false
     private var activeTableSortDescriptor: NSSortDescriptor?
     private var lastRequestedVisibleRow: Int?
+    #if DEBUG
+    private(set) var didOpenPreviewFromTableDoubleAction = false
+    #endif
 
     private let filterPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sortPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -324,7 +327,7 @@ final class MainViewController: NSViewController {
         tableView.setAccessibilityIdentifier("main.profilesTable")
         tableView.delegate = self
         tableView.dataSource = self
-        tableView.doubleAction = #selector(previewSelectedItems(_:))
+        tableView.doubleAction = #selector(handleTableDoubleAction(_:))
         tableView.quickLookHandler = { [weak self] in
             self?.previewSelectedItems(nil)
         }
@@ -751,7 +754,7 @@ final class MainViewController: NSViewController {
     }
 
     private func applyBulkSelectionDetailState(_ records: [ProfileRecord]) {
-        let expiredCount = records.filter(\.isExpired).count
+        let expiredCount = records.filter(\.currentIsExpired).count
         let uniqueTeams = Set(records.compactMap(\.teamName)).count
 
         titleLabel.stringValue = "\(records.count) 个描述文件"
@@ -907,7 +910,7 @@ final class MainViewController: NSViewController {
         类型: \(record.profileType ?? "-")
         创建时间: \(record.creationDateValue.map(Formatters.timestampString(from:)) ?? "-")
         到期时间: \(record.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-")
-        剩余天数: \(record.daysUntilExpiration.map(String.init) ?? "-")
+        剩余天数: \(record.currentDaysUntilExpiration.map(String.init) ?? "-")
         设备数量: \(record.deviceCount)
         证书数量: \(record.certificateCount)
         来源目录: \(record.sourceName)
@@ -1031,6 +1034,10 @@ final class MainViewController: NSViewController {
         }
     }
 
+    private func shouldOpenPreviewForTableDoubleAction(clickedRow: Int, clickedColumn: Int) -> Bool {
+        clickedRow >= 0 && clickedColumn >= 0 && currentProfiles.indices.contains(clickedRow)
+    }
+
     private func effectiveProfileContextSelection() -> [ProfileRecord] {
         let selected = selectedRecords()
         if !selected.isEmpty {
@@ -1052,10 +1059,10 @@ final class MainViewController: NSViewController {
     }
 
     private func badgeColor(for record: ProfileRecord) -> NSColor {
-        if record.isExpired {
+        if record.currentIsExpired {
             return .systemRed
         }
-        if let days = record.daysUntilExpiration, days <= 30 {
+        if let days = record.currentDaysUntilExpiration, days <= 30 {
             return .systemOrange
         }
         return .systemGreen
@@ -1135,8 +1142,8 @@ final class MainViewController: NSViewController {
         case "expires":
             return { [weak self] lhs, rhs in
                 guard let self else { return false }
-                if lhs.isExpired != rhs.isExpired {
-                    return lhs.isExpired == false
+                if lhs.currentIsExpired != rhs.currentIsExpired {
+                    return lhs.currentIsExpired == false
                 }
 
                 let expirationOrder = self.optionalTimeComparison(lhs.expirationDate, rhs.expirationDate)
@@ -1211,13 +1218,13 @@ final class MainViewController: NSViewController {
     }
 
     private func statusSortRank(for record: ProfileRecord) -> (Int, Int) {
-        if record.isExpired {
+        if record.currentIsExpired {
             return (0, Int.min)
         }
-        if let daysUntilExpiration = record.daysUntilExpiration, daysUntilExpiration <= 30 {
+        if let daysUntilExpiration = record.currentDaysUntilExpiration, daysUntilExpiration <= 30 {
             return (1, daysUntilExpiration)
         }
-        return (2, record.daysUntilExpiration ?? Int.max)
+        return (2, record.currentDaysUntilExpiration ?? Int.max)
     }
 
     private func apply(order: ComparisonResult, ascending: Bool) -> Bool {
@@ -1394,6 +1401,16 @@ final class MainViewController: NSViewController {
         } catch {
             NSApp.presentError(error)
         }
+    }
+
+    @objc private func handleTableDoubleAction(_ sender: Any?) {
+        guard shouldOpenPreviewForTableDoubleAction(clickedRow: tableView.clickedRow, clickedColumn: tableView.clickedColumn) else {
+            return
+        }
+        #if DEBUG
+        didOpenPreviewFromTableDoubleAction = true
+        #endif
+        previewSelectedItems(sender)
     }
 
     @objc private func showSelectedInFinder(_ sender: Any?) {
@@ -1796,6 +1813,7 @@ extension MainViewController {
     var debugCurrentProfilePaths: [String] { currentProfiles.map(\.path) }
     var debugSelectedProfilePaths: [String] { selectedRecords().map(\.path) }
     var debugLastRequestedVisibleRow: Int? { lastRequestedVisibleRow }
+    var debugDidOpenPreviewFromTableDoubleAction: Bool { didOpenPreviewFromTableDoubleAction }
     var debugVisibleRowRange: NSRange {
         view.layoutSubtreeIfNeeded()
         splitView.layoutSubtreeIfNeeded()
@@ -1849,6 +1867,14 @@ extension MainViewController {
         let inspection = context.archiveInspector.makeInspection(for: parsedProfile, sourceURL: URL(fileURLWithPath: record.path))
         let rootNode = InspectorNodeBuilder.makeRootNode(from: parsedProfile.plist, certificates: parsedProfile.certificates)
         applyLoadedDetails(parsedProfile, inspection: inspection, rootNode: rootNode)
+    }
+
+    func debugHandleTableDoubleAction(clickedRow: Int, clickedColumn: Int) {
+        didOpenPreviewFromTableDoubleAction = false
+        guard shouldOpenPreviewForTableDoubleAction(clickedRow: clickedRow, clickedColumn: clickedColumn) else {
+            return
+        }
+        didOpenPreviewFromTableDoubleAction = true
     }
 }
 #endif

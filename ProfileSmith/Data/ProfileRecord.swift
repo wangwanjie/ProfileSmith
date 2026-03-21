@@ -33,7 +33,7 @@ struct ProfileRecord: Codable, FetchableRecord, PersistableRecord, Hashable, Ide
 
     var id: String { path }
 
-    enum Columns: String, ColumnExpression {
+    enum Columns: String, ColumnExpression, CaseIterable {
         case path
         case sourceKind
         case sourceName
@@ -64,6 +64,16 @@ struct ProfileRecord: Codable, FetchableRecord, PersistableRecord, Hashable, Ide
 }
 
 extension ProfileRecord {
+    private var effectiveExpirationState: (isExpired: Bool, daysUntilExpiration: Int?) {
+        guard let expirationDateValue else {
+            return (isExpired, daysUntilExpiration)
+        }
+        return (
+            expirationDateValue < Date(),
+            MobileProvisionParser.daysUntilExpiration(for: expirationDateValue)
+        )
+    }
+
     var displayName: String {
         name?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? fileName
     }
@@ -80,11 +90,20 @@ extension ProfileRecord {
         Date(timeIntervalSince1970: fileModificationTime)
     }
 
+    var currentIsExpired: Bool {
+        effectiveExpirationState.isExpired
+    }
+
+    var currentDaysUntilExpiration: Int? {
+        effectiveExpirationState.daysUntilExpiration
+    }
+
     var statusText: String {
-        if isExpired {
+        let expirationState = effectiveExpirationState
+        if expirationState.isExpired {
             return "已过期"
         }
-        guard let daysUntilExpiration else {
+        guard let daysUntilExpiration = expirationState.daysUntilExpiration else {
             return "有效"
         }
         if daysUntilExpiration == 0 {
@@ -94,6 +113,18 @@ extension ProfileRecord {
             return "\(daysUntilExpiration) 天内到期"
         }
         return "有效"
+    }
+
+    func recalculatingExpirationState(referenceDate: Date = Date()) -> ProfileRecord {
+        guard let expirationDateValue else { return self }
+
+        var record = self
+        record.isExpired = expirationDateValue < referenceDate
+        record.daysUntilExpiration = MobileProvisionParser.daysUntilExpiration(
+            for: expirationDateValue,
+            referenceDate: referenceDate
+        )
+        return record
     }
 }
 
