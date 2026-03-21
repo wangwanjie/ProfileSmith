@@ -159,19 +159,19 @@ final class ArchiveInspector {
     static func renderHTML(title: String, profile: ParsedProfile?, infoPlist: [String: Any]?) -> String {
         let entitlements = profile?.plist["Entitlements"] as? [String: Any] ?? [:]
         let summaryRows: [(String, String)] = [
-            ("名称", profile?.record.displayName ?? title),
-            ("Bundle ID", profile?.record.bundleIdentifier ?? "-"),
-            ("App ID Name", profile?.record.appIDName ?? "-"),
-            ("团队", profile?.record.teamName ?? "-"),
-            ("Team ID", profile?.record.teamIdentifier ?? "-"),
-            ("类型", profile?.record.profileType ?? "-"),
-            ("平台", profile?.record.profilePlatform ?? "-"),
-            ("UUID", profile?.record.uuid ?? "-"),
-            ("创建", profile?.record.creationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
-            ("到期", profile?.record.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
-            ("Application ID", profile?.record.applicationIdentifier ?? "-"),
-            ("证书", "\(profile?.record.certificateCount ?? 0)"),
-            ("设备", "\(profile?.record.deviceCount ?? 0)"),
+            (L10n.previewWindowRowName, profile?.record.displayName ?? title),
+            (L10n.previewWindowRowBundleID, profile?.record.bundleIdentifier ?? "-"),
+            (L10n.previewWindowRowAppIDName, profile?.record.appIDName ?? "-"),
+            (L10n.previewWindowRowTeam, profile?.record.teamName ?? "-"),
+            (L10n.previewWindowRowTeamID, profile?.record.teamIdentifier ?? "-"),
+            (L10n.previewWindowRowType, L10n.localizedProfileType(profile?.record.profileType)),
+            (L10n.previewWindowRowPlatform, L10n.localizedPlatform(profile?.record.profilePlatform)),
+            (L10n.previewWindowRowUUID, profile?.record.uuid ?? "-"),
+            (L10n.previewWindowRowCreated, profile?.record.creationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
+            (L10n.previewWindowRowExpires, profile?.record.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-"),
+            (L10n.previewWindowRowApplicationID, profile?.record.applicationIdentifier ?? "-"),
+            (L10n.previewWindowRowCertificates, "\(profile?.record.certificateCount ?? 0)"),
+            (L10n.previewWindowRowDevices, "\(profile?.record.deviceCount ?? 0)"),
         ]
 
         let entitlementRows = entitlements.keys.sorted().map { key in
@@ -333,25 +333,25 @@ final class ArchiveInspector {
         <div class="page">
             <div class="stack">
                 <section class="hero">
-                    <div class="badge">Preview</div>
+                    <div class="badge">\(escapeHTML(L10n.previewHTMLBadge))</div>
                     <h1>\(escapeHTML(title))</h1>
-                    <div class="subtitle">在当前窗口中查看描述文件概要、Entitlements、Info.plist 与证书摘要。</div>
+                    <div class="subtitle">\(escapeHTML(L10n.previewHTMLSubtitle))</div>
                 </section>
                 <section class="card">
-                    <h2>概要</h2>
+                    <h2>\(escapeHTML(L10n.previewHTMLSectionOverview))</h2>
                     <table>\(detailRows)</table>
                 </section>
                 <section class="card">
-                    <h2>Entitlements</h2>
-                    \(entitlementRows.isEmpty ? "<div class=\"empty\">没有可显示的 Entitlements</div>" : "<table>\(entitlementRows)</table>")
+                    <h2>\(escapeHTML(L10n.previewHTMLSectionEntitlements))</h2>
+                    \(entitlementRows.isEmpty ? "<div class=\"empty\">\(escapeHTML(L10n.previewHTMLEmptyEntitlements))</div>" : "<table>\(entitlementRows)</table>")
                 </section>
                 <section class="card">
-                    <h2>Info.plist</h2>
-                    \(infoRows.isEmpty ? "<div class=\"empty\">没有可显示的 Info.plist 数据</div>" : "<table>\(infoRows)</table>")
+                    <h2>\(escapeHTML(L10n.previewHTMLSectionInfoPlist))</h2>
+                    \(infoRows.isEmpty ? "<div class=\"empty\">\(escapeHTML(L10n.previewHTMLEmptyInfoPlist))</div>" : "<table>\(infoRows)</table>")
                 </section>
                 <section class="card">
-                    <h2>证书</h2>
-                    \(certificateRows.isEmpty ? "<div class=\"empty\">没有证书数据</div>" : "<ul>\(certificateRows)</ul>")
+                    <h2>\(escapeHTML(L10n.previewHTMLSectionCertificates))</h2>
+                    \(certificateRows.isEmpty ? "<div class=\"empty\">\(escapeHTML(L10n.previewHTMLEmptyCertificates))</div>" : "<ul>\(certificateRows)</ul>")
                 </section>
             </div>
         </div>

@@ -101,18 +101,18 @@ extension ProfileRecord {
     var statusText: String {
         let expirationState = effectiveExpirationState
         if expirationState.isExpired {
-            return "已过期"
+            return L10n.profileStatusExpired
         }
         guard let daysUntilExpiration = expirationState.daysUntilExpiration else {
-            return "有效"
+            return L10n.profileStatusValid
         }
         if daysUntilExpiration == 0 {
-            return "今天到期"
+            return L10n.profileStatusExpiringToday
         }
         if daysUntilExpiration <= 30 {
-            return "\(daysUntilExpiration) 天内到期"
+            return L10n.profileStatusExpiringSoon(daysUntilExpiration)
         }
-        return "有效"
+        return L10n.profileStatusValid
     }
 
     func recalculatingExpirationState(referenceDate: Date = Date()) -> ProfileRecord {
@@ -148,19 +148,19 @@ enum ProfileFilter: String, CaseIterable {
     var title: String {
         switch self {
         case .all:
-            return "全部"
+            return L10n.filterAll
         case .expiringSoon:
-            return "30 天内到期"
+            return L10n.filterExpiringSoon
         case .expired:
-            return "已过期"
+            return L10n.filterExpired
         case .development:
-            return "开发"
+            return L10n.filterDevelopment
         case .distribution:
-            return "分发"
+            return L10n.filterDistribution
         case .enterprise:
-            return "企业"
+            return L10n.filterEnterprise
         case .mac:
-            return "Mac"
+            return L10n.filterMac
         }
     }
 }
@@ -175,15 +175,15 @@ enum ProfileSort: String, CaseIterable {
     var title: String {
         switch self {
         case .expirationAscending:
-            return "到期时间升序"
+            return L10n.sortExpirationAscending
         case .expirationDescending:
-            return "到期时间降序"
+            return L10n.sortExpirationDescending
         case .nameAscending:
-            return "名称"
+            return L10n.sortNameAscending
         case .teamAscending:
-            return "团队"
+            return L10n.sortTeamAscending
         case .modificationDescending:
-            return "最近修改"
+            return L10n.sortModificationDescending
         }
     }
 }

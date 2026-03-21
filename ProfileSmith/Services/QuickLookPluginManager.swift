@@ -7,9 +7,9 @@ enum QuickLookPluginError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .embeddedExtensionsMissing:
-            return "应用内未找到 Finder Quick Look 扩展。"
+            return L10n.quickLookMissingExtensions
         case .registrationFailed(let output):
-            return output.isEmpty ? "Finder Quick Look 刷新失败。" : output
+            return output.isEmpty ? L10n.quickLookRefreshFailed : output
         }
     }
 }
@@ -50,13 +50,13 @@ final class QuickLookPluginManager {
     }
 
     var buttonTitle: String {
-        guard isAvailable else { return "Finder Quick Look 不可用" }
-        return isRegistered ? "刷新 Finder Quick Look" : "启用 Finder Quick Look"
+        guard isAvailable else { return L10n.quickLookUnavailable }
+        return isRegistered ? L10n.quickLookRefresh : L10n.quickLookEnable
     }
 
     var stateDescription: String {
-        guard isAvailable else { return "未嵌入 Finder Quick Look 扩展" }
-        return isRegistered ? "Finder Quick Look 已就绪" : "Finder Quick Look 待刷新"
+        guard isAvailable else { return L10n.quickLookMissingExtensions }
+        return isRegistered ? L10n.quickLookReady : L10n.quickLookPending
     }
 
     var embeddedExtensionURLs: [URL] {

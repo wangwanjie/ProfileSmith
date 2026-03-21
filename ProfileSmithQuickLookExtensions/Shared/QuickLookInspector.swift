@@ -12,15 +12,15 @@ enum QuickLookInspectionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFile(let url):
-            return "不支持的文件类型: \(url.lastPathComponent)"
+            return QuickLookL10n.unsupportedFile(url.lastPathComponent)
         case .unreadableData(let url):
-            return "无法读取文件: \(url.path)"
+            return QuickLookL10n.unreadableData(url.path)
         case .missingEmbeddedPlist(let url):
-            return "未在文件中找到可解析的 plist: \(url.lastPathComponent)"
+            return QuickLookL10n.missingEmbeddedPlist(url.lastPathComponent)
         case .malformedPropertyList(let url):
-            return "plist 结构无法解析: \(url.lastPathComponent)"
+            return QuickLookL10n.malformedPropertyList(url.lastPathComponent)
         case .missingApplicationBundle(let url):
-            return "没有找到应用包: \(url.path)"
+            return QuickLookL10n.missingApplicationBundle(url.path)
         }
     }
 }
@@ -141,7 +141,7 @@ final class ProfileSmithQuickLookInspector {
             teamName: nil,
             teamIdentifier: nil,
             profileType: fileKind.badgeText,
-            platform: infoPlist?["DTPlatformName"] as? String,
+            platform: (infoPlist?["DTPlatformName"] as? String).map(QuickLookL10n.platform),
             uuid: nil,
             creationDate: nil,
             expirationDate: nil,
@@ -238,22 +238,22 @@ final class ProfileSmithQuickLookInspector {
         let isEnterprise = plist["ProvisionsAllDevices"] as? Bool ?? false
 
         if fileExtension == "provisionprofile" {
-            return hasDevices ? "Development" : "Distribution (App Store)"
+            return QuickLookL10n.profileType(hasDevices ? "Development" : "Distribution (App Store)")
         }
         if hasDevices {
-            return getTaskAllow ? "Development" : "Distribution (Ad Hoc)"
+            return QuickLookL10n.profileType(getTaskAllow ? "Development" : "Distribution (Ad Hoc)")
         }
-        return isEnterprise ? "Enterprise" : "Distribution (App Store)"
+        return QuickLookL10n.profileType(isEnterprise ? "Enterprise" : "Distribution (App Store)")
     }
 
     private static func profilePlatform(from plist: [String: Any], fileExtension: String) -> String {
         if fileExtension == "provisionprofile" {
-            return "Mac"
+            return QuickLookL10n.platform("Mac")
         }
         if let platforms = plist["Platform"] as? [String], let platform = platforms.first {
-            return platform
+            return QuickLookL10n.platform(platform)
         }
-        return "iOS"
+        return QuickLookL10n.platform("iOS")
     }
 
     private static func bundleIdentifier(applicationIdentifier: String?, prefix: String?) -> String? {
@@ -272,9 +272,9 @@ final class ProfileSmithQuickLookInspector {
 
     private static func certificateSummary(for data: Data) -> String {
         guard let certificate = SecCertificateCreateWithData(nil, data as CFData) else {
-            return "Certificate"
+            return QuickLookL10n.certificateFallback
         }
-        return SecCertificateCopySubjectSummary(certificate) as String? ?? "Certificate"
+        return SecCertificateCopySubjectSummary(certificate) as String? ?? QuickLookL10n.certificateFallback
     }
 
     private static func entitlementRows(from entitlements: [String: Any]) -> [(key: String, value: String)] {

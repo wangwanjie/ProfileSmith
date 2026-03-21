@@ -1,6 +1,66 @@
 import Cocoa
 import Combine
 
+enum StatusItemMenuAction {
+    case openMainWindow
+    case refresh
+    case toggleQuickLookPlugin
+    case checkForUpdates
+    case quit
+}
+
+struct StatusItemMenuEntry {
+    let title: String
+    let action: StatusItemMenuAction?
+    let isEnabled: Bool
+    let isSeparator: Bool
+
+    init(title: String, action: StatusItemMenuAction?, isEnabled: Bool = true) {
+        self.title = title
+        self.action = action
+        self.isEnabled = isEnabled
+        self.isSeparator = false
+    }
+
+    private init(isSeparator: Bool) {
+        self.title = ""
+        self.action = nil
+        self.isEnabled = false
+        self.isSeparator = isSeparator
+    }
+
+    static let separator = StatusItemMenuEntry(isSeparator: true)
+}
+
+struct StatusItemMenuContent {
+    let buttonTitle: String
+    let entries: [StatusItemMenuEntry]
+
+    init(snapshot: RepositorySnapshot, quickLookButtonTitle: String, quickLookAvailable: Bool) {
+        buttonTitle = snapshot.metrics.expiredCount > 0 ? "PS !\(snapshot.metrics.expiredCount)" : "PS"
+        entries = [
+            StatusItemMenuEntry(title: L10n.statusIndexed(snapshot.metrics.totalCount), action: nil, isEnabled: false),
+            StatusItemMenuEntry(
+                title: L10n.statusWarning(expired: snapshot.metrics.expiredCount, expiringSoon: snapshot.metrics.expiringSoonCount),
+                action: nil,
+                isEnabled: false
+            ),
+            .separator,
+            StatusItemMenuEntry(title: L10n.statusOpen, action: .openMainWindow),
+            StatusItemMenuEntry(title: L10n.statusRefresh, action: .refresh),
+            StatusItemMenuEntry(title: quickLookButtonTitle, action: .toggleQuickLookPlugin, isEnabled: quickLookAvailable),
+            StatusItemMenuEntry(title: L10n.statusCheckForUpdates, action: .checkForUpdates),
+            .separator,
+            StatusItemMenuEntry(title: L10n.statusQuit, action: .quit),
+        ]
+    }
+
+    var visibleTitles: [String] {
+        entries.filter { !$0.isSeparator }.map(\.title)
+    }
+}
+
+@MainActor
 final class StatusItemController {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let repository: ProfileRepository
@@ -37,45 +97,66 @@ final class StatusItemController {
                 self?.rebuildMenu(with: snapshot)
             }
             .store(in: &cancellables)
+
+        AppLocalization.shared.$language
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.rebuildMenu(with: self.repository.snapshot)
+            }
+            .store(in: &cancellables)
     }
 
     private func rebuildMenu(with snapshot: RepositorySnapshot) {
+        let content = StatusItemMenuContent(
+            snapshot: snapshot,
+            quickLookButtonTitle: quickLookPluginManager.buttonTitle,
+            quickLookAvailable: quickLookPluginManager.isAvailable
+        )
         let menu = NSMenu()
 
-        let summaryItem = NSMenuItem(title: "已索引 \(snapshot.metrics.totalCount) 个描述文件", action: nil, keyEquivalent: "")
-        summaryItem.isEnabled = false
-        menu.addItem(summaryItem)
+        for entry in content.entries {
+            if entry.isSeparator {
+                menu.addItem(NSMenuItem.separator())
+                continue
+            }
 
-        let warningItem = NSMenuItem(title: "已过期 \(snapshot.metrics.expiredCount) 个，30 天内到期 \(snapshot.metrics.expiringSoonCount) 个", action: nil, keyEquivalent: "")
-        warningItem.isEnabled = false
-        menu.addItem(warningItem)
-        menu.addItem(NSMenuItem.separator())
+            let item = NSMenuItem(title: entry.title, action: selector(for: entry.action), keyEquivalent: "")
+            item.target = target(for: entry.action)
+            item.isEnabled = entry.isEnabled
+            menu.addItem(item)
+        }
 
-        let openItem = NSMenuItem(title: "打开 ProfileSmith", action: #selector(openMainWindow), keyEquivalent: "")
-        openItem.target = self
-        menu.addItem(openItem)
-
-        let refreshItem = NSMenuItem(title: "刷新索引", action: #selector(refresh), keyEquivalent: "")
-        refreshItem.target = self
-        menu.addItem(refreshItem)
-
-        let quickLookTitle = quickLookPluginManager.buttonTitle
-        let quickLookItem = NSMenuItem(title: quickLookTitle, action: #selector(toggleQuickLookPlugin), keyEquivalent: "")
-        quickLookItem.target = self
-        quickLookItem.isEnabled = quickLookPluginManager.isAvailable
-        menu.addItem(quickLookItem)
-
-        let updateItem = NSMenuItem(title: "检查更新…", action: #selector(checkForUpdates), keyEquivalent: "")
-        updateItem.target = self
-        menu.addItem(updateItem)
-
-        menu.addItem(NSMenuItem.separator())
-        let quitItem = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-        quitItem.target = NSApp
-        menu.addItem(quitItem)
-
-        statusItem.button?.title = snapshot.metrics.expiredCount > 0 ? "PS !\(snapshot.metrics.expiredCount)" : "PS"
+        statusItem.button?.title = content.buttonTitle
         statusItem.menu = menu
+    }
+
+    private func selector(for action: StatusItemMenuAction?) -> Selector? {
+        switch action {
+        case .openMainWindow:
+            return #selector(openMainWindow)
+        case .refresh:
+            return #selector(refresh)
+        case .toggleQuickLookPlugin:
+            return #selector(toggleQuickLookPlugin)
+        case .checkForUpdates:
+            return #selector(checkForUpdates)
+        case .quit:
+            return #selector(NSApplication.terminate(_:))
+        case nil:
+            return nil
+        }
+    }
+
+    private func target(for action: StatusItemMenuAction?) -> AnyObject? {
+        switch action {
+        case .quit:
+            return NSApp
+        case .openMainWindow, .refresh, .toggleQuickLookPlugin, .checkForUpdates:
+            return self
+        case nil:
+            return nil
+        }
     }
 
     @objc private func openMainWindow() {

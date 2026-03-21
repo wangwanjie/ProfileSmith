@@ -207,7 +207,7 @@ final class UpdateManager: NSObject {
     private func checkLatestGitHubRelease(interactive: Bool) async {
         guard let latestReleaseAPIURL else {
             if interactive {
-                presentFailureAlert(message: "未配置 GitHub Releases 更新地址。")
+                presentFailureAlert(message: L10n.updateNotConfigured)
             }
             return
         }
@@ -239,18 +239,18 @@ final class UpdateManager: NSObject {
         guard latest > current else {
             if interactive {
                 let alert = NSAlert()
-                alert.messageText = "当前已是最新版本"
-                alert.informativeText = "当前版本 \(currentVersion)，GitHub 最新版本 \(release.tagName)。"
+                alert.messageText = L10n.updateUpToDateTitle
+                alert.informativeText = L10n.updateUpToDateBody(current: currentVersion, latest: release.tagName)
                 alert.runModal()
             }
             return
         }
 
         let alert = NSAlert()
-        alert.messageText = "发现新版本 \(release.tagName)"
-        alert.informativeText = release.body?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "是否前往 GitHub 查看并下载？"
-        alert.addButton(withTitle: "打开 GitHub")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L10n.updateAvailableTitle(release.tagName)
+        alert.informativeText = release.body?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? L10n.updateAvailableFallback
+        alert.addButton(withTitle: L10n.updateButtonOpenGitHub)
+        alert.addButton(withTitle: L10n.cancel)
         if alert.runModal() == .alertFirstButtonReturn {
             NSWorkspace.shared.open(release.htmlURL)
         }
@@ -258,10 +258,10 @@ final class UpdateManager: NSObject {
 
     private func presentFailureAlert(message: String) {
         let alert = NSAlert()
-        alert.messageText = "检查更新失败"
+        alert.messageText = L10n.updateFailureTitle
         alert.informativeText = message
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: L10n.confirm)
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
     }

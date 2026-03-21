@@ -48,34 +48,34 @@ private final class QuickLookNativePreviewView: NSView {
         addContentView(makeHeaderCard(for: inspection))
         addContentView(
             makeRowsCard(
-                title: "概要",
-                subtitle: "覆盖描述文件、嵌入签名和核心有效期信息。",
+                title: QuickLookL10n.sectionOverview,
+                subtitle: QuickLookL10n.sectionOverviewSubtitle,
                 rows: inspection.summaryRows,
-                emptyText: "没有可显示的概要信息。"
+                emptyText: QuickLookL10n.sectionOverviewEmpty
             )
         )
         addContentView(
             makeRowsCard(
-                title: "Entitlements",
-                subtitle: "优先展示应用标识、设备能力与调试权限。",
+                title: QuickLookL10n.sectionEntitlements,
+                subtitle: QuickLookL10n.sectionEntitlementsSubtitle,
                 rows: inspection.entitlementRows,
-                emptyText: "没有可显示的 Entitlements。"
+                emptyText: QuickLookL10n.sectionEntitlementsEmpty
             )
         )
         addContentView(
             makeRowsCard(
-                title: "Info.plist",
-                subtitle: "仅在 IPA、App、XCArchive 或 APPEX 内解析到 Info.plist 时显示。",
+                title: QuickLookL10n.sectionInfoPlist,
+                subtitle: QuickLookL10n.sectionInfoPlistSubtitle,
                 rows: inspection.infoRows,
-                emptyText: "没有可显示的 Info.plist 数据。"
+                emptyText: QuickLookL10n.sectionInfoPlistEmpty
             )
         )
         addContentView(
             makeRowsCard(
-                title: "证书摘要",
-                subtitle: "展示签名证书主题和 SHA-1 摘要。",
+                title: QuickLookL10n.sectionCertificates,
+                subtitle: QuickLookL10n.sectionCertificatesSubtitle,
                 rows: inspection.certificateRows,
-                emptyText: "没有可显示的证书摘要。"
+                emptyText: QuickLookL10n.sectionCertificatesEmpty
             )
         )
     }
@@ -84,8 +84,8 @@ private final class QuickLookNativePreviewView: NSView {
         contentStack.removeAllArrangedSubviews()
 
         let card = QuickLookCardView(accentColor: .systemRed)
-        card.addArrangedSubview(makePillRow(primaryText: "Quick Look", primaryColor: .systemRed, primaryFillColor: .systemRed.withAlphaComponent(0.14), secondaryText: "无法解析"))
-        card.addArrangedSubview(makeTitleLabel("无法预览 \(fileURL.lastPathComponent)"))
+        card.addArrangedSubview(makePillRow(primaryText: QuickLookL10n.quickLookTitle, primaryColor: .systemRed, primaryFillColor: .systemRed.withAlphaComponent(0.14), secondaryText: QuickLookL10n.parseFailed))
+        card.addArrangedSubview(makeTitleLabel(QuickLookL10n.cannotPreview(fileURL.lastPathComponent)))
         card.addArrangedSubview(makeBodyLabel(fileURL.path, color: .secondaryLabelColor, selectable: true, lineBreakMode: .byCharWrapping))
         card.addArrangedSubview(makeBodyLabel(error.localizedDescription, color: .labelColor, selectable: true, lineBreakMode: .byWordWrapping))
         addContentView(card)

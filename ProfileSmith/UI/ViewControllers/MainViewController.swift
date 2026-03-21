@@ -25,14 +25,14 @@ final class MainViewController: NSViewController {
     private let filterPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let sortPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let searchField = NSSearchField(frame: .zero)
-    private let refreshButton = NSButton(title: "刷新", target: nil, action: nil)
-    private let importButton = NSButton(title: "导入/预览…", target: nil, action: nil)
+    private let refreshButton = NSButton(title: L10n.mainRefresh, target: nil, action: nil)
+    private let importButton = NSButton(title: L10n.mainImportPreview, target: nil, action: nil)
     private let pluginButton = NSButton(title: "Finder Quick Look", target: nil, action: nil)
     private let progressIndicator = NSProgressIndicator()
     private let loadingOverlay = NSView()
     private let loadingPanel = NSVisualEffectView()
-    private let loadingTitleLabel = NSTextField(labelWithString: "正在加载描述文件…")
-    private let loadingHintLabel = NSTextField(labelWithString: "首次扫描或目录内容较多时会稍慢一些。")
+    private let loadingTitleLabel = NSTextField(labelWithString: L10n.mainLoadingTitle)
+    private let loadingHintLabel = NSTextField(labelWithString: L10n.mainLoadingHint)
     private let loadingPanelIndicator = NSProgressIndicator()
 
     private let splitView = NSSplitView()
@@ -40,8 +40,8 @@ final class MainViewController: NSViewController {
     private let detailContainer = NSView()
     private let tableView = ProfilesTableView()
     private let tableScrollView = NSScrollView()
-    private let titleLabel = NSTextField(labelWithString: "ProfileSmith")
-    private let subtitleLabel = NSTextField(labelWithString: "选择一个描述文件查看详情")
+    private let titleLabel = NSTextField(labelWithString: L10n.appName)
+    private let subtitleLabel = NSTextField(labelWithString: L10n.mainEmptySubtitle)
     private let typeBadge = BadgeView()
     private let platformBadge = BadgeView()
     private let statusBadge = BadgeView()
@@ -50,9 +50,14 @@ final class MainViewController: NSViewController {
     private let detailOutlineView = NSOutlineView()
     private let detailOutlineScrollView = NSScrollView()
     private let previewContentView = HTMLPreviewView()
-    private let tabControl = NSSegmentedControl(labels: ["概要", "详情", "预览"], trackingMode: .selectOne, target: nil, action: nil)
+    private let tabControl = NSSegmentedControl(
+        labels: [L10n.mainTabOverview, L10n.mainTabDetail, L10n.mainTabPreview],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
     private let tabView = NSTabView()
-    private let statusLabel = NSTextField(labelWithString: "准备就绪")
+    private let statusLabel = NSTextField(labelWithString: "")
     private var preferredSplitPosition: CGFloat?
     private var isApplyingPreferredSplitPosition = false
     private var isRepositoryRefreshing = false
@@ -64,12 +69,12 @@ final class MainViewController: NSViewController {
     }
 
     private lazy var actionButtons: [NSButton] = [
-        makeActionButton(title: "预览", action: #selector(previewSelectedItems(_:))),
-        makeActionButton(title: "Finder", action: #selector(showSelectedInFinder(_:))),
-        makeActionButton(title: "导出", action: #selector(exportSelectedProfile(_:))),
-        makeActionButton(title: "美化文件名", action: #selector(renameSelectedProfile(_:))),
-        makeActionButton(title: "移到废纸篓", action: #selector(moveSelectedProfilesToTrash(_:))),
-        makeActionButton(title: "彻底删除", action: #selector(deleteSelectedProfiles(_:))),
+        makeActionButton(title: L10n.mainActionPreview, action: #selector(previewSelectedItems(_:))),
+        makeActionButton(title: L10n.mainActionFinder, action: #selector(showSelectedInFinder(_:))),
+        makeActionButton(title: L10n.mainActionExport, action: #selector(exportSelectedProfile(_:))),
+        makeActionButton(title: L10n.mainActionBeautifyFilename, action: #selector(renameSelectedProfile(_:))),
+        makeActionButton(title: L10n.mainActionMoveToTrash, action: #selector(moveSelectedProfilesToTrash(_:))),
+        makeActionButton(title: L10n.mainActionDeletePermanently, action: #selector(deleteSelectedProfiles(_:))),
     ]
 
     private lazy var rootDropView: DropHostingView = {
@@ -108,6 +113,7 @@ final class MainViewController: NSViewController {
         super.viewDidLoad()
         buildUI()
         bindRepository()
+        bindLocalization()
         configureInitialControls()
     }
 
@@ -144,10 +150,10 @@ final class MainViewController: NSViewController {
         let manager = context.quickLookPluginManager
         alert.messageText = manager.stateDescription
         alert.informativeText = manager.isAvailable
-            ? "ProfileSmith 已内建 Finder Quick Look 扩展。点击“\(manager.buttonTitle)”后，Finder 就可以对 `.ipa`、`.xcarchive`、`.app`、`.appex`、`.mobileprovision` 和 `.provisionprofile` 文件按空格快速预览。"
-            : "当前构建中未找到 Finder Quick Look 扩展，请先重新构建应用。"
+            ? L10n.quickLookPanelAvailable(manager.buttonTitle)
+            : L10n.quickLookPanelUnavailable
         alert.addButton(withTitle: manager.buttonTitle)
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: L10n.cancel)
         if alert.runModal() != .alertFirstButtonReturn { return }
 
         do {
@@ -172,7 +178,7 @@ final class MainViewController: NSViewController {
         topRow.alignment = .centerY
         topRow.spacing = 10
 
-        searchField.placeholderString = "全文搜索描述文件内容、Bundle ID、Team、UUID…"
+        searchField.placeholderString = L10n.mainSearchPlaceholder
         searchField.sendsSearchStringImmediately = true
         searchField.delegate = self
         searchField.setAccessibilityIdentifier("main.searchField")
@@ -337,13 +343,13 @@ final class MainViewController: NSViewController {
         tableView.menu = profileContextMenu
 
         let columns: [(identifier: String, title: String, width: CGFloat, minWidth: CGFloat, sortKey: String)] = [
-            ("name", "名称", 220, 80, "name"),
+            ("name", L10n.mainColumnName, 220, 80, "name"),
             ("bundle", "Bundle ID", 230, 120, "bundle"),
-            ("team", "Team", 170, 100, "team"),
-            ("platform", "平台", 40, 30, "platform"),
-            ("type", "类型", 120, 80, "type"),
-            ("expires", "到期", 110, 90, "expires"),
-            ("status", "状态", 110, 70, "status"),
+            ("team", L10n.mainColumnTeam, 170, 100, "team"),
+            ("platform", L10n.mainColumnPlatform, 40, 30, "platform"),
+            ("type", L10n.mainColumnType, 120, 80, "type"),
+            ("expires", L10n.mainColumnExpires, 110, 90, "expires"),
+            ("status", L10n.mainColumnStatus, 110, 70, "status"),
         ]
 
         for columnSpec in columns {
@@ -399,13 +405,13 @@ final class MainViewController: NSViewController {
         detailOutlineView.menu = detailContextMenu
         detailOutlineView.setAccessibilityIdentifier("main.detailOutlineView")
         let keyColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("key"))
-        keyColumn.title = "键"
+        keyColumn.title = L10n.mainInspectorKey
         keyColumn.width = 200
         let typeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("type"))
-        typeColumn.title = "类型"
+        typeColumn.title = L10n.mainInspectorType
         typeColumn.width = 110
         let detailColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("detail"))
-        detailColumn.title = "值"
+        detailColumn.title = L10n.mainInspectorValue
         detailColumn.width = 360
         detailOutlineView.addTableColumn(keyColumn)
         detailOutlineView.addTableColumn(typeColumn)
@@ -482,25 +488,29 @@ final class MainViewController: NSViewController {
     }
 
     private func configureInitialControls() {
-        filterPopUp.removeAllItems()
-        ProfileFilter.allCases.forEach { filter in
-            filterPopUp.addItem(withTitle: filter.title)
-        }
+        rebuildFilterPopUp()
         filterPopUp.target = self
         filterPopUp.action = #selector(filterChanged(_:))
         filterPopUp.selectItem(at: ProfileFilter.allCases.firstIndex(of: .all) ?? 0)
 
-        sortPopUp.removeAllItems()
-        ProfileSort.allCases.forEach { sort in
-            sortPopUp.addItem(withTitle: sort.title)
-        }
+        rebuildSortPopUp()
         sortPopUp.target = self
         sortPopUp.action = #selector(sortChanged(_:))
         sortPopUp.selectItem(at: ProfileSort.allCases.firstIndex(of: .expirationAscending) ?? 0)
 
+        applyLocalization()
         updatePluginButtonTitle()
         updateActionState()
         applyEmptyDetailState()
+    }
+
+    private func bindLocalization() {
+        AppLocalization.shared.$language
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyLocalization()
+            }
+            .store(in: &cancellables)
     }
 
     private func bindRepository() {
@@ -522,6 +532,91 @@ final class MainViewController: NSViewController {
             .store(in: &cancellables)
 
         syncRepositoryRefreshState(snapshot: context.repository.snapshot)
+    }
+
+    private func applyLocalization() {
+        searchField.placeholderString = L10n.mainSearchPlaceholder
+        refreshButton.title = L10n.mainRefresh
+        importButton.title = L10n.mainImportPreview
+        loadingTitleLabel.stringValue = L10n.mainLoadingTitle
+        loadingHintLabel.stringValue = L10n.mainLoadingHint
+        tabControl.setLabel(L10n.mainTabOverview, forSegment: 0)
+        tabControl.setLabel(L10n.mainTabDetail, forSegment: 1)
+        tabControl.setLabel(L10n.mainTabPreview, forSegment: 2)
+
+        let actionTitles = [
+            L10n.mainActionPreview,
+            L10n.mainActionFinder,
+            L10n.mainActionExport,
+            L10n.mainActionBeautifyFilename,
+            L10n.mainActionMoveToTrash,
+            L10n.mainActionDeletePermanently,
+        ]
+        for (button, title) in zip(actionButtons, actionTitles) {
+            button.title = title
+        }
+
+        rebuildFilterPopUp()
+        rebuildSortPopUp()
+        updateTableColumnTitles()
+        updateInspectorColumnTitles()
+        updatePluginButtonTitle()
+        refreshLocalizedContent()
+    }
+
+    private func rebuildFilterPopUp() {
+        let selectedIndex = max(0, filterPopUp.indexOfSelectedItem)
+        let selectedFilter = ProfileFilter.allCases.indices.contains(selectedIndex) ? ProfileFilter.allCases[selectedIndex] : .all
+        filterPopUp.removeAllItems()
+        filterPopUp.addItems(withTitles: ProfileFilter.allCases.map(\.title))
+        if let index = ProfileFilter.allCases.firstIndex(of: selectedFilter) {
+            filterPopUp.selectItem(at: index)
+        }
+    }
+
+    private func rebuildSortPopUp() {
+        let selectedIndex = max(0, sortPopUp.indexOfSelectedItem)
+        let selectedSort = ProfileSort.allCases.indices.contains(selectedIndex) ? ProfileSort.allCases[selectedIndex] : .expirationAscending
+        sortPopUp.removeAllItems()
+        sortPopUp.addItems(withTitles: ProfileSort.allCases.map(\.title))
+        if let index = ProfileSort.allCases.firstIndex(of: selectedSort) {
+            sortPopUp.selectItem(at: index)
+        }
+    }
+
+    private func updateTableColumnTitles() {
+        let titles: [String: String] = [
+            "name": L10n.mainColumnName,
+            "bundle": L10n.mainColumnBundle,
+            "team": L10n.mainColumnTeam,
+            "platform": L10n.mainColumnPlatform,
+            "type": L10n.mainColumnType,
+            "expires": L10n.mainColumnExpires,
+            "status": L10n.mainColumnStatus,
+        ]
+
+        for column in tableView.tableColumns {
+            guard let title = titles[column.identifier.rawValue] else { continue }
+            column.title = title
+            if column.identifier.rawValue == "status" {
+                column.headerCell = TrailingBorderlessTableHeaderCell(textCell: title)
+            }
+        }
+    }
+
+    private func updateInspectorColumnTitles() {
+        detailOutlineView.tableColumns.first(where: { $0.identifier.rawValue == "key" })?.title = L10n.mainInspectorKey
+        detailOutlineView.tableColumns.first(where: { $0.identifier.rawValue == "type" })?.title = L10n.mainInspectorType
+        detailOutlineView.tableColumns.first(where: { $0.identifier.rawValue == "detail" })?.title = L10n.mainInspectorValue
+    }
+
+    private func refreshLocalizedContent() {
+        if selectedRecords().isEmpty {
+            applyEmptyDetailState()
+        } else {
+            reloadSelectionDrivenUI()
+        }
+        updateStatusLabel(snapshot: context.repository.snapshot)
     }
 
     private func performRepositoryUIUpdate(_ update: @escaping () -> Void) {
@@ -692,13 +787,13 @@ final class MainViewController: NSViewController {
 
         titleLabel.stringValue = record.displayName
         subtitleLabel.stringValue = record.path
-        summaryTextView.string = "正在解析描述文件详情…"
+        summaryTextView.string = L10n.mainDetailLoading
         previewContentView.loadHTMLString(
-            makePreviewStatusHTML(title: "正在生成预览", message: "请稍候，ProfileSmith 正在整理描述文件和签名信息。"),
+            makePreviewStatusHTML(title: L10n.mainPreviewGeneratingTitle, message: L10n.mainPreviewGeneratingMessage),
             baseURL: nil
         )
-        typeBadge.configure(text: record.profileType, fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
-        platformBadge.configure(text: record.profilePlatform, fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
+        typeBadge.configure(text: L10n.localizedProfileType(record.profileType), fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
+        platformBadge.configure(text: L10n.localizedPlatform(record.profilePlatform), fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
         statusBadge.configure(text: record.statusText, fillColor: badgeColor(for: record).withAlphaComponent(0.16), textColor: badgeColor(for: record))
         stabilizeSplitViewLayout()
     }
@@ -721,30 +816,23 @@ final class MainViewController: NSViewController {
         currentInspection = nil
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
-        summaryTextView.string = "解析失败：\(error.localizedDescription)"
+        summaryTextView.string = L10n.mainDetailParseFailed(error.localizedDescription)
         previewContentView.loadHTMLString(
-            makePreviewStatusHTML(title: "预览生成失败", message: error.localizedDescription),
+            makePreviewStatusHTML(title: L10n.mainPreviewFailedTitle, message: error.localizedDescription),
             baseURL: nil
         )
         stabilizeSplitViewLayout()
     }
 
     private func applyEmptyDetailState() {
-        titleLabel.stringValue = "ProfileSmith"
-        subtitleLabel.stringValue = "拖入描述文件、IPA、XCArchive 或 APPEX，或在左侧选择已有描述文件。"
+        titleLabel.stringValue = L10n.appName
+        subtitleLabel.stringValue = L10n.mainEmptySubtitle
         typeBadge.configure(text: nil, fillColor: .clear)
         platformBadge.configure(text: nil, fillColor: .clear)
         statusBadge.configure(text: nil, fillColor: .clear)
-        summaryTextView.string = """
-        使用说明
-
-        1. 左侧列表展示 `~/Library/MobileDevice/Provisioning Profiles` 和 `~/Library/Developer/Xcode/UserData/Provisioning Profiles` 中的描述文件。
-        2. 支持全文搜索、批量选中、Finder 定位、导出、移到废纸篓、彻底删除和文件名美化。
-        3. 可以直接拖入 `.mobileprovision` / `.provisionprofile` 安装，也可以拖入 `.ipa` / `.xcarchive` / `.appex` / `.app` 做描述文件与 Info.plist 预览。
-        4. Finder Quick Look 已随应用内建；若 Finder 尚未识别，可点击顶部 `Finder Quick Look` 按钮刷新注册。
-        """
+        summaryTextView.string = L10n.mainEmptySummary
         previewContentView.loadHTMLString(
-            makePreviewStatusHTML(title: "ProfileSmith", message: "选择一个描述文件，或直接把文件拖进窗口。"),
+            makePreviewStatusHTML(title: L10n.appName, message: L10n.mainEmptyPreviewMessage),
             baseURL: nil
         )
         currentInspectorRoot = nil
@@ -757,16 +845,16 @@ final class MainViewController: NSViewController {
         let expiredCount = records.filter(\.currentIsExpired).count
         let uniqueTeams = Set(records.compactMap(\.teamName)).count
 
-        titleLabel.stringValue = "\(records.count) 个描述文件"
-        subtitleLabel.stringValue = "已选择多个项目，可以批量在 Finder 中显示、移到废纸篓或彻底删除。"
-        typeBadge.configure(text: "批量操作", fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
-        platformBadge.configure(text: "\(uniqueTeams) 个 Team", fillColor: NSColor.systemGray.withAlphaComponent(0.14), textColor: .secondaryLabelColor)
-        statusBadge.configure(text: "已过期 \(expiredCount) 个", fillColor: NSColor.systemOrange.withAlphaComponent(0.16), textColor: .systemOrange)
+        titleLabel.stringValue = L10n.mainBulkTitle(records.count)
+        subtitleLabel.stringValue = L10n.mainBulkSubtitle
+        typeBadge.configure(text: L10n.mainBulkBadge, fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
+        platformBadge.configure(text: L10n.mainBulkTeamCount(uniqueTeams), fillColor: NSColor.systemGray.withAlphaComponent(0.14), textColor: .secondaryLabelColor)
+        statusBadge.configure(text: L10n.mainBulkExpiredCount(expiredCount), fillColor: NSColor.systemOrange.withAlphaComponent(0.16), textColor: .systemOrange)
         summaryTextView.string = records.map { record in
-            "\(record.displayName)\n  \(record.bundleIdentifier ?? record.appIDName ?? "-")\n  \(record.profileType ?? "-") | \(record.statusText)\n  \(record.path)"
+            "\(record.displayName)\n  \(record.bundleIdentifier ?? record.appIDName ?? "-")\n  \(L10n.localizedProfileType(record.profileType)) | \(record.statusText)\n  \(record.path)"
         }.joined(separator: "\n\n")
         previewContentView.loadHTMLString(
-            makePreviewStatusHTML(title: "已选择 \(records.count) 个描述文件", message: "批量操作可用，详情树和预览仅在单选时展示。"),
+            makePreviewStatusHTML(title: L10n.mainBulkPreviewTitle(records.count), message: L10n.mainBulkPreviewMessage),
             baseURL: nil
         )
         currentParsedProfile = nil
@@ -880,6 +968,7 @@ final class MainViewController: NSViewController {
 
     private func makeSummaryText(for parsedProfile: ParsedProfile) -> String {
         let record = parsedProfile.record
+        let placeholder = "-"
         let entitlements = parsedProfile.plist["Entitlements"] as? [String: Any] ?? [:]
         let entitlementsText = entitlements.keys.sorted().map { key in
             "\(key): \(String(describing: entitlements[key] ?? ""))"
@@ -887,10 +976,10 @@ final class MainViewController: NSViewController {
         let certificateText = parsedProfile.certificates.map { certificate in
             var parts = ["\(certificate.summary)"]
             if let organization = certificate.organization {
-                parts.append("组织: \(organization)")
+                parts.append("\(L10n.mainSummaryTeam): \(organization)")
             }
             if let invalidityDate = certificate.invalidityDate {
-                parts.append("失效时间: \(Formatters.timestampString(from: invalidityDate))")
+                parts.append("\(L10n.mainSummaryExpirationDate): \(Formatters.timestampString(from: invalidityDate))")
             }
             parts.append("SHA1: \(certificate.sha1)")
             parts.append("SHA256: \(certificate.sha256)")
@@ -898,29 +987,29 @@ final class MainViewController: NSViewController {
         }.joined(separator: "\n\n")
 
         return """
-        基本信息
-        名称: \(record.displayName)
-        UUID: \(record.uuid ?? "-")
-        Bundle ID: \(record.bundleIdentifier ?? "-")
-        App ID Name: \(record.appIDName ?? "-")
-        Application Identifier: \(record.applicationIdentifier ?? "-")
-        Team: \(record.teamName ?? "-")
-        Team Identifier: \(record.teamIdentifier ?? "-")
-        平台: \(record.profilePlatform ?? "-")
-        类型: \(record.profileType ?? "-")
-        创建时间: \(record.creationDateValue.map(Formatters.timestampString(from:)) ?? "-")
-        到期时间: \(record.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-")
-        剩余天数: \(record.currentDaysUntilExpiration.map(String.init) ?? "-")
-        设备数量: \(record.deviceCount)
-        证书数量: \(record.certificateCount)
-        来源目录: \(record.sourceName)
-        文件路径: \(record.path)
+        \(L10n.mainSummaryBasicInfo)
+        \(L10n.mainSummaryName): \(record.displayName)
+        \(L10n.mainSummaryUUID): \(record.uuid ?? placeholder)
+        \(L10n.mainSummaryBundleID): \(record.bundleIdentifier ?? placeholder)
+        \(L10n.mainSummaryAppIDName): \(record.appIDName ?? placeholder)
+        \(L10n.mainSummaryApplicationIdentifier): \(record.applicationIdentifier ?? placeholder)
+        \(L10n.mainSummaryTeam): \(record.teamName ?? placeholder)
+        \(L10n.mainSummaryTeamIdentifier): \(record.teamIdentifier ?? placeholder)
+        \(L10n.mainSummaryPlatform): \(record.profilePlatform.map(L10n.localizedPlatform) ?? placeholder)
+        \(L10n.mainSummaryType): \(record.profileType.map(L10n.localizedProfileType) ?? placeholder)
+        \(L10n.mainSummaryCreationDate): \(record.creationDateValue.map(Formatters.timestampString(from:)) ?? placeholder)
+        \(L10n.mainSummaryExpirationDate): \(record.expirationDateValue.map(Formatters.timestampString(from:)) ?? placeholder)
+        \(L10n.mainSummaryRemainingDays): \(record.currentDaysUntilExpiration.map(String.init) ?? placeholder)
+        \(L10n.mainSummaryDeviceCount): \(record.deviceCount)
+        \(L10n.mainSummaryCertificateCount): \(record.certificateCount)
+        \(L10n.mainSummarySourceDirectory): \(record.sourceName)
+        \(L10n.mainSummaryFilePath): \(record.path)
 
-        Entitlements
-        \(entitlementsText.isEmpty ? "-" : entitlementsText)
+        \(L10n.mainSummaryEntitlements)
+        \(entitlementsText.isEmpty ? placeholder : entitlementsText)
 
-        证书
-        \(certificateText.isEmpty ? "-" : certificateText)
+        \(L10n.mainSummaryCertificates)
+        \(certificateText.isEmpty ? placeholder : certificateText)
         """
     }
 
@@ -943,13 +1032,26 @@ final class MainViewController: NSViewController {
         let totalCount = snapshot.metrics.totalCount
         let expiredCount = snapshot.metrics.expiredCount
         let expiringSoonCount = snapshot.metrics.expiringSoonCount
-        let refreshText = snapshot.lastRefreshDate.map { "最近刷新 \(Formatters.timestampString(from: $0))" } ?? "尚未刷新"
-        let prefix = isRepositoryRefreshing ? "正在加载… " : ""
+        let refreshText = snapshot.lastRefreshDate.map { L10n.mainLastRefresh(Formatters.timestampString(from: $0)) } ?? L10n.mainNeverRefreshed
+        let prefix = isRepositoryRefreshing ? L10n.mainLoadingPrefix : ""
 
         if selectionCount > 0 {
-            statusLabel.stringValue = "\(prefix)当前结果 \(currentResultCount) 条，已选中 \(selectionCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
+            statusLabel.stringValue = prefix + L10n.mainStatusSummarySelected(
+                current: currentResultCount,
+                selected: selectionCount,
+                total: totalCount,
+                expired: expiredCount,
+                expiringSoon: expiringSoonCount,
+                refresh: refreshText
+            )
         } else {
-            statusLabel.stringValue = "\(prefix)当前结果 \(currentResultCount) 条，总计 \(totalCount) 条，过期 \(expiredCount) 条，30 天内到期 \(expiringSoonCount) 条。\(refreshText)"
+            statusLabel.stringValue = prefix + L10n.mainStatusSummary(
+                current: currentResultCount,
+                total: totalCount,
+                expired: expiredCount,
+                expiringSoon: expiringSoonCount,
+                refresh: refreshText
+            )
         }
     }
 
@@ -1340,8 +1442,11 @@ final class MainViewController: NSViewController {
 
                 if shouldShowImportAlert && (!importResult.installedURLs.isEmpty || !importResult.skippedURLs.isEmpty) {
                     let alert = NSAlert()
-                    alert.messageText = "导入完成"
-                    alert.informativeText = "已安装 \(importResult.installedURLs.count) 个，已跳过 \(importResult.skippedURLs.count) 个重复文件。"
+                    alert.messageText = L10n.mainImportCompletedTitle
+                    alert.informativeText = L10n.mainImportCompletedBody(
+                        installed: importResult.installedURLs.count,
+                        skipped: importResult.skippedURLs.count
+                    )
                     alert.runModal()
                 }
             }
@@ -1443,7 +1548,7 @@ final class MainViewController: NSViewController {
             selectedPaths = [renamedURL.path]
             detailRequestID &+= 1
             prepareDetailLoadingState(for: optimisticRenamedRecord(from: record, renamedURL: renamedURL))
-            summaryTextView.string = "已完成文件名美化，正在刷新索引与详情…"
+            summaryTextView.string = L10n.mainRenameCompleted
             context.repository.refresh(forceReindex: false)
         } catch {
             NSApp.presentError(error)
@@ -1464,12 +1569,12 @@ final class MainViewController: NSViewController {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = permanently ? "彻底删除所选描述文件？" : "将所选描述文件移到废纸篓？"
+        alert.messageText = permanently ? L10n.mainDeletePermanentlyTitle : L10n.mainDeleteToTrashTitle
         let previewNames = records.prefix(10).map(\.displayName).joined(separator: "\n")
         let suffix = records.count > 10 ? "\n…" : ""
         alert.informativeText = "\(previewNames)\(suffix)"
-        alert.addButton(withTitle: permanently ? "删除" : "移到废纸篓")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: permanently ? L10n.delete : L10n.moveToTrash)
+        alert.addButton(withTitle: L10n.cancel)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         do {
@@ -1537,8 +1642,8 @@ final class MainViewController: NSViewController {
             record.displayName,
             record.bundleIdentifier ?? record.appIDName ?? "-",
             record.teamName ?? "-",
-            record.profilePlatform ?? "-",
-            record.profileType ?? "-",
+            L10n.localizedPlatform(record.profilePlatform),
+            L10n.localizedProfileType(record.profileType),
             record.expirationDateValue.map(Formatters.dayString(from:)) ?? "-",
             record.statusText,
         ].joined(separator: "\t")
@@ -1616,11 +1721,11 @@ extension MainViewController: NSTableViewDataSource, NSTableViewDelegate {
             cell.textField?.font = .systemFont(ofSize: 12)
             cell.textField?.textColor = .secondaryLabelColor
         case "platform":
-            cell.textField?.stringValue = record.profilePlatform ?? "-"
+            cell.textField?.stringValue = L10n.localizedPlatform(record.profilePlatform)
             cell.textField?.font = .systemFont(ofSize: 12)
             cell.textField?.textColor = .secondaryLabelColor
         case "type":
-            cell.textField?.stringValue = record.profileType ?? "-"
+            cell.textField?.stringValue = L10n.localizedProfileType(record.profileType)
             cell.textField?.font = .systemFont(ofSize: 12)
             cell.textField?.textColor = .secondaryLabelColor
         case "expires":
@@ -1744,40 +1849,40 @@ extension MainViewController: NSMenuDelegate {
             let selection = effectiveProfileContextSelection()
             guard !selection.isEmpty else { return }
 
-            let previewItem = NSMenuItem(title: "快速预览", action: #selector(previewSelectedItems(_:)), keyEquivalent: "")
+            let previewItem = NSMenuItem(title: L10n.mainContextPreview, action: #selector(previewSelectedItems(_:)), keyEquivalent: "")
             previewItem.target = self
             previewItem.isEnabled = selection.count == 1
             menu.addItem(previewItem)
 
-            let finderItem = NSMenuItem(title: "在 Finder 中显示", action: #selector(showSelectedInFinder(_:)), keyEquivalent: "")
+            let finderItem = NSMenuItem(title: L10n.mainContextShowInFinder, action: #selector(showSelectedInFinder(_:)), keyEquivalent: "")
             finderItem.target = self
             menu.addItem(finderItem)
 
-            let copyPathItem = NSMenuItem(title: "复制路径", action: #selector(copySelectedPaths(_:)), keyEquivalent: "")
+            let copyPathItem = NSMenuItem(title: L10n.mainContextCopyPath, action: #selector(copySelectedPaths(_:)), keyEquivalent: "")
             copyPathItem.target = self
             menu.addItem(copyPathItem)
 
-            let copyRowItem = NSMenuItem(title: "复制行内容", action: #selector(copySelectedRowContents(_:)), keyEquivalent: "")
+            let copyRowItem = NSMenuItem(title: L10n.mainContextCopyRow, action: #selector(copySelectedRowContents(_:)), keyEquivalent: "")
             copyRowItem.target = self
             menu.addItem(copyRowItem)
 
-            let exportItem = NSMenuItem(title: "导出描述文件…", action: #selector(exportSelectedProfile(_:)), keyEquivalent: "")
+            let exportItem = NSMenuItem(title: L10n.mainContextExportProfile, action: #selector(exportSelectedProfile(_:)), keyEquivalent: "")
             exportItem.target = self
             exportItem.isEnabled = selection.count == 1
             menu.addItem(exportItem)
 
-            let renameItem = NSMenuItem(title: "美化文件名", action: #selector(renameSelectedProfile(_:)), keyEquivalent: "")
+            let renameItem = NSMenuItem(title: L10n.mainContextBeautifyFilename, action: #selector(renameSelectedProfile(_:)), keyEquivalent: "")
             renameItem.target = self
             renameItem.isEnabled = selection.count == 1
             menu.addItem(renameItem)
 
             menu.addItem(NSMenuItem.separator())
 
-            let trashItem = NSMenuItem(title: "移到废纸篓", action: #selector(moveSelectedProfilesToTrash(_:)), keyEquivalent: "")
+            let trashItem = NSMenuItem(title: L10n.mainContextMoveToTrash, action: #selector(moveSelectedProfilesToTrash(_:)), keyEquivalent: "")
             trashItem.target = self
             menu.addItem(trashItem)
 
-            let deleteItem = NSMenuItem(title: "彻底删除", action: #selector(deleteSelectedProfiles(_:)), keyEquivalent: "")
+            let deleteItem = NSMenuItem(title: L10n.mainContextDeletePermanently, action: #selector(deleteSelectedProfiles(_:)), keyEquivalent: "")
             deleteItem.target = self
             menu.addItem(deleteItem)
             return
@@ -1785,15 +1890,15 @@ extension MainViewController: NSMenuDelegate {
 
         guard let node = effectiveInspectorNode(), node.kind == .certificate else { return }
 
-        let exportItem = NSMenuItem(title: "导出证书文件…", action: #selector(exportSelectedCertificate(_:)), keyEquivalent: "")
+        let exportItem = NSMenuItem(title: L10n.mainContextExportCertificate, action: #selector(exportSelectedCertificate(_:)), keyEquivalent: "")
         exportItem.target = self
         menu.addItem(exportItem)
 
-        let copySHA1Item = NSMenuItem(title: "复制 SHA1", action: #selector(copyCertificateSHA1(_:)), keyEquivalent: "")
+        let copySHA1Item = NSMenuItem(title: L10n.mainContextCopySHA1, action: #selector(copyCertificateSHA1(_:)), keyEquivalent: "")
         copySHA1Item.target = self
         menu.addItem(copySHA1Item)
 
-        let copySHA256Item = NSMenuItem(title: "复制 SHA256", action: #selector(copyCertificateSHA256(_:)), keyEquivalent: "")
+        let copySHA256Item = NSMenuItem(title: L10n.mainContextCopySHA256, action: #selector(copyCertificateSHA256(_:)), keyEquivalent: "")
         copySHA256Item.target = self
         menu.addItem(copySHA256Item)
     }

@@ -1,4 +1,5 @@
 import Cocoa
+import Combine
 import SnapKit
 import WebKit
 
@@ -9,9 +10,15 @@ private struct PreviewOverviewRow {
 
 final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource, NSOutlineViewDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     private let inspection: PreviewInspection
+    private var cancellables = Set<AnyCancellable>()
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
-    private let segmentedControl = NSSegmentedControl(labels: ["总览", "描述文件", "Info.plist"], trackingMode: .selectOne, target: nil, action: nil)
+    private let segmentedControl = NSSegmentedControl(
+        labels: [L10n.previewWindowTabOverview, L10n.previewWindowTabProfile, L10n.previewWindowTabInfoPlist],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
     private let tabView = NSTabView()
     private let overviewTableView = CopyableTableView()
     private let overviewScrollView = NSScrollView()
@@ -46,6 +53,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
 
         buildUI(in: contentViewController.view)
         configure()
+        bindLocalization()
     }
 
     @available(*, unavailable)
@@ -154,8 +162,6 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
     private func configure() {
         titleLabel.stringValue = inspection.title
         subtitleLabel.stringValue = inspection.sourceURL.path
-        overviewRows = makeOverviewRows()
-        overviewTableView.reloadData()
         profileRootNode = inspection.parsedProfile.map {
             InspectorNodeBuilder.makeRootNode(from: $0.plist, certificates: $0.certificates)
         }
@@ -170,7 +176,29 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
             segmentedControl.setEnabled(false, forSegment: 2)
         }
 
+        applyLocalization()
         updateOutlineForSelectedSegment()
+    }
+
+    private func bindLocalization() {
+        AppLocalization.shared.$language
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyLocalization()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func applyLocalization() {
+        segmentedControl.setLabel(L10n.previewWindowTabOverview, forSegment: 0)
+        segmentedControl.setLabel(L10n.previewWindowTabProfile, forSegment: 1)
+        segmentedControl.setLabel(L10n.previewWindowTabInfoPlist, forSegment: 2)
+        updateOutlineColumnTitles(profileOutlineView)
+        updateOutlineColumnTitles(infoOutlineView)
+        overviewRows = makeOverviewRows()
+        overviewTableView.reloadData()
+        profileOutlineView.reloadData()
+        infoOutlineView.reloadData()
     }
 
     @objc private func segmentChanged(_ sender: Any?) {
@@ -309,7 +337,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         menu.removeAllItems()
 
         if menu === overviewContextMenu {
-            let item = NSMenuItem(title: "复制选中行", action: #selector(copySelectedOverviewRows(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: L10n.previewWindowCopySelectedRows, action: #selector(copySelectedOverviewRows(_:)), keyEquivalent: "")
             item.target = self
             item.isEnabled = !selectedOverviewRows().isEmpty
             menu.addItem(item)
@@ -326,7 +354,7 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
             hasSelection = !selectedInspectorNodes(in: infoOutlineView).isEmpty
         }
 
-        let item = NSMenuItem(title: "复制选中行", action: action, keyEquivalent: "")
+        let item = NSMenuItem(title: L10n.previewWindowCopySelectedRows, action: action, keyEquivalent: "")
         item.target = self
         item.isEnabled = hasSelection
         menu.addItem(item)
@@ -361,18 +389,24 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
         outlineView.delegate = self
 
         let keyColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("key"))
-        keyColumn.title = "键"
+        keyColumn.title = L10n.previewWindowColumnKey
         keyColumn.width = 260
         let typeColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("type"))
-        typeColumn.title = "类型"
+        typeColumn.title = L10n.previewWindowColumnType
         typeColumn.width = 120
         let detailColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("detail"))
-        detailColumn.title = "值"
+        detailColumn.title = L10n.previewWindowColumnValue
         detailColumn.width = 460
         outlineView.addTableColumn(keyColumn)
         outlineView.addTableColumn(typeColumn)
         outlineView.addTableColumn(detailColumn)
         outlineView.outlineTableColumn = keyColumn
+    }
+
+    private func updateOutlineColumnTitles(_ outlineView: NSOutlineView) {
+        outlineView.tableColumns.first(where: { $0.identifier.rawValue == "key" })?.title = L10n.previewWindowColumnKey
+        outlineView.tableColumns.first(where: { $0.identifier.rawValue == "type" })?.title = L10n.previewWindowColumnType
+        outlineView.tableColumns.first(where: { $0.identifier.rawValue == "detail" })?.title = L10n.previewWindowColumnValue
     }
 
     private func selectedOverviewRows() -> [PreviewOverviewRow] {
@@ -431,46 +465,32 @@ final class PreviewWindowController: NSWindowController, NSOutlineViewDataSource
             ?? (inspection.infoPlist?["CFBundleIdentifier"] as? String)
             ?? "-"
         let teamName = record?.teamName ?? "-"
-        let typeName = record?.profileType ?? fallbackFileTypeDescription(for: inspection.sourceURL)
+        let typeName = record?.profileType.map(L10n.localizedProfileType) ?? fallbackFileTypeDescription(for: inspection.sourceURL)
         let platformName = record?.profilePlatform
-            ?? (inspection.infoPlist?["DTPlatformName"] as? String)
+            .map(L10n.localizedPlatform)
+            ?? (inspection.infoPlist?["DTPlatformName"] as? String).map(L10n.localizedPlatform)
             ?? "-"
         let expiration = record?.expirationDateValue.map(Formatters.timestampString(from:)) ?? "-"
-        let embeddedProfile = record?.displayName ?? "无嵌入描述文件"
-        let infoAvailability = inspection.infoPlist == nil ? "无" : "有"
+        let embeddedProfile = record?.displayName ?? L10n.previewWindowNoEmbeddedProfile
+        let infoAvailability = inspection.infoPlist == nil ? L10n.previewWindowAvailabilityUnavailable : L10n.previewWindowAvailabilityAvailable
 
         return [
-            PreviewOverviewRow(key: "文件", value: inspection.sourceURL.lastPathComponent),
-            PreviewOverviewRow(key: "名称", value: inspection.title),
-            PreviewOverviewRow(key: "Bundle ID", value: bundleIdentifier),
-            PreviewOverviewRow(key: "团队", value: teamName),
-            PreviewOverviewRow(key: "类型", value: typeName),
-            PreviewOverviewRow(key: "平台", value: platformName),
-            PreviewOverviewRow(key: "到期", value: expiration),
-            PreviewOverviewRow(key: "证书", value: "\(record?.certificateCount ?? 0)"),
-            PreviewOverviewRow(key: "设备", value: "\(record?.deviceCount ?? 0)"),
-            PreviewOverviewRow(key: "描述文件", value: embeddedProfile),
-            PreviewOverviewRow(key: "Info.plist", value: infoAvailability),
+            PreviewOverviewRow(key: L10n.previewWindowRowFile, value: inspection.sourceURL.lastPathComponent),
+            PreviewOverviewRow(key: L10n.previewWindowRowName, value: inspection.title),
+            PreviewOverviewRow(key: L10n.previewWindowRowBundleID, value: bundleIdentifier),
+            PreviewOverviewRow(key: L10n.previewWindowRowTeam, value: teamName),
+            PreviewOverviewRow(key: L10n.previewWindowRowType, value: typeName),
+            PreviewOverviewRow(key: L10n.previewWindowRowPlatform, value: platformName),
+            PreviewOverviewRow(key: L10n.previewWindowRowExpires, value: expiration),
+            PreviewOverviewRow(key: L10n.previewWindowRowCertificates, value: "\(record?.certificateCount ?? 0)"),
+            PreviewOverviewRow(key: L10n.previewWindowRowDevices, value: "\(record?.deviceCount ?? 0)"),
+            PreviewOverviewRow(key: L10n.previewWindowRowEmbeddedProfile, value: embeddedProfile),
+            PreviewOverviewRow(key: L10n.previewWindowRowInfoPlist, value: infoAvailability),
         ]
     }
 
     private func fallbackFileTypeDescription(for url: URL) -> String {
-        switch url.pathExtension.lowercased() {
-        case "ipa":
-            return "IPA"
-        case "xcarchive":
-            return "XCArchive"
-        case "app":
-            return "APP"
-        case "appex":
-            return "APPEX"
-        case "mobileprovision":
-            return "iOS Profile"
-        case "provisionprofile":
-            return "Mac Profile"
-        default:
-            return "文件"
-        }
+        L10n.localizedFileType(for: url.pathExtension)
     }
 }
 

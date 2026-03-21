@@ -40,7 +40,7 @@ final class ThumbnailProvider: QLThumbnailProvider {
         NSGraphicsContext.current = graphicsContext
         defer { NSGraphicsContext.restoreGraphicsState() }
 
-        NSColor.white.setFill()
+        NSColor.windowBackgroundColor.setFill()
         bounds.fill()
 
         let outerRect = bounds.insetBy(dx: max(8, size.width * 0.04), dy: max(8, size.height * 0.04))
@@ -74,7 +74,7 @@ final class ThumbnailProvider: QLThumbnailProvider {
         titleStyle.lineBreakMode = .byTruncatingTail
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: min(28, size.width * 0.13), weight: .bold),
-            .foregroundColor: NSColor(calibratedWhite: 0.11, alpha: 1),
+            .foregroundColor: NSColor.labelColor,
             .paragraphStyle: titleStyle,
         ]
         NSString(string: inspection.title).draw(in: titleRect, withAttributes: titleAttributes)
@@ -82,14 +82,14 @@ final class ThumbnailProvider: QLThumbnailProvider {
         let lines = [
             inspection.bundleIdentifier,
             inspection.teamName,
-            inspection.expirationDate.map { "到期 \(QuickLookFormatters.timestampString(from: $0))" },
+            inspection.expirationDate.map { QuickLookL10n.thumbnailExpiration(QuickLookFormatters.timestampString(from: $0)) },
         ].compactMap { $0 }.prefix(3)
 
         let bodyStyle = NSMutableParagraphStyle()
         bodyStyle.lineBreakMode = .byTruncatingTail
         let bodyAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: min(16, size.width * 0.07), weight: .medium),
-            .foregroundColor: NSColor(calibratedWhite: 0.34, alpha: 1),
+            .foregroundColor: NSColor.secondaryLabelColor,
             .paragraphStyle: bodyStyle,
         ]
 

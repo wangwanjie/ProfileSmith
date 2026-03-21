@@ -51,13 +51,13 @@ enum ParserError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedFile(let url):
-            return "不支持的描述文件格式: \(url.lastPathComponent)"
+            return L10n.parserUnsupportedFile(url.lastPathComponent)
         case .unreadableData(let url):
-            return "无法读取文件: \(url.path)"
+            return L10n.parserUnreadableData(url.path)
         case .missingEmbeddedPlist(let url):
-            return "未在文件中找到可解析的 plist: \(url.lastPathComponent)"
+            return L10n.parserMissingEmbeddedPlist(url.lastPathComponent)
         case .malformedPropertyList(let url):
-            return "plist 结构无法解析: \(url.lastPathComponent)"
+            return L10n.parserMalformedPropertyList(url.lastPathComponent)
         }
     }
 }

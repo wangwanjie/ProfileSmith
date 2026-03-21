@@ -1,4 +1,5 @@
 import Cocoa
+import Combine
 
 final class MainWindowController: NSWindowController, NSWindowDelegate {
     private enum Constants {
@@ -6,6 +7,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     let contentController: MainViewController
+    private var cancellables = Set<AnyCancellable>()
 
     init(context: AppContext) {
         contentController = MainViewController(context: context)
@@ -16,7 +18,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "ProfileSmith"
+        window.title = L10n.appName
         window.center()
         window.minSize = NSSize(width: 1100, height: 720)
         window.contentViewController = contentController
@@ -27,6 +29,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         shouldCascadeWindows = false
         window.setFrameAutosaveName(Constants.autosaveName)
         window.delegate = self
+        bindLocalization()
     }
 
     @available(*, unavailable)
@@ -60,5 +63,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         }
 
         window.center()
+    }
+
+    private func bindLocalization() {
+        AppLocalization.shared.$language
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.window?.title = L10n.appName
+            }
+            .store(in: &cancellables)
     }
 }

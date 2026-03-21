@@ -3,6 +3,7 @@ import Foundation
 import Testing
 @testable import ProfileSmith
 
+@Suite(.serialized)
 struct MainViewControllerTests {
     @MainActor
     @Test
