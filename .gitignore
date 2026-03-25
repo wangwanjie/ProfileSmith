@@ -1,8 +1,20 @@
-.DS_Store
-build/
 default.profraw
-DerivedData/
-xcuserdata/
-*.xcuserstate
-*.xcresult
 
+.DS_Store
+xcuserdata/
+
+Pods/
+Podfile.lock
+
+xcuserdata/
+
+*.xcscmblueprint
+*.xccheckout
+
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+/*.gcno
+**/xcshareddata/WorkspaceSettings.xcsettings
