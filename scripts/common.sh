@@ -4,7 +4,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_NAME="ProfileSmith"
 SCHEME="ProfileSmith"
-PBXPROJ="$PROJECT_DIR/ProfileSmith.xcodeproj/project.pbxproj"
+MAIN_PROJECT="$PROJECT_DIR/ProfileSmith.xcodeproj"
+MAIN_WORKSPACE="$PROJECT_DIR/ProfileSmith.xcworkspace"
+MAIN_PBXPROJ="$MAIN_PROJECT/project.pbxproj"
 INFO_PLIST="$PROJECT_DIR/ProfileSmith-Info.plist"
 SPARKLE_PROJECT="$PROJECT_DIR/Vendor/Sparkle/Sparkle.xcodeproj"
 SPARKLE_DERIVED_DATA="$PROJECT_DIR/build/SparkleTools"
@@ -12,6 +14,14 @@ SPARKLE_BIN_DIR="$SPARKLE_DERIVED_DATA/Build/Products/Release"
 DEFAULT_REPO="wangwanjie/ProfileSmith"
 DEFAULT_SPARKLE_ACCOUNT="cn.vanjay.ProfileSmith.sparkle"
 DEFAULT_NOTARY_PROFILE="vanjay_mac_stapler"
+
+main_build_xcodebuild_args() {
+    if [[ -d "$MAIN_WORKSPACE" ]]; then
+        printf '%s\n' "-workspace" "$MAIN_WORKSPACE" "-scheme" "$SCHEME"
+    else
+        printf '%s\n' "-project" "$MAIN_PROJECT" "-scheme" "$SCHEME"
+    fi
+}
 
 require_command() {
     local command_name="$1"
@@ -43,11 +53,11 @@ resolve_existing_path() {
 
 read_pbxproj_setting() {
     local key="$1"
-    if [[ ! -f "$PBXPROJ" ]]; then
+    if [[ ! -f "$MAIN_PBXPROJ" ]]; then
         return 1
     fi
 
-    grep -m1 "$key" "$PBXPROJ" | sed "s/.*$key = \\([^;]*\\);/\\1/" | tr -d ' '
+    grep -m1 "$key" "$MAIN_PBXPROJ" | sed "s/.*$key = \\([^;]*\\);/\\1/" | tr -d ' '
 }
 
 read_marketing_version() {

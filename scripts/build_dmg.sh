@@ -366,7 +366,7 @@ require_command xcrun
 
 VERSION="$(read_marketing_version)"
 if [[ -z "$VERSION" ]]; then
-    echo "error: failed to read MARKETING_VERSION from $PBXPROJ" >&2
+    echo "error: failed to read MARKETING_VERSION from $MAIN_PBXPROJ" >&2
     exit 1
 fi
 
@@ -383,13 +383,16 @@ DMG_NAME="${APP_NAME}_V_${VERSION}.dmg"
 APP_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION/${APP_NAME}.app"
 DMG_PATH="$DMG_OUTPUT_DIR/$DMG_NAME"
 VOLUME_NAME="${APP_NAME} V$VERSION"
+MAIN_BUILD_ARGS=()
+while IFS= read -r arg; do
+    MAIN_BUILD_ARGS+=("$arg")
+done < <(main_build_xcodebuild_args)
 
 mkdir -p "$DMG_OUTPUT_DIR"
 
 echo "building $APP_NAME $VERSION"
 xcodebuild \
-    -project "$PROJECT_DIR/ProfileSmith.xcodeproj" \
-    -scheme "$SCHEME" \
+    "${MAIN_BUILD_ARGS[@]}" \
     -configuration "$CONFIGURATION" \
     -derivedDataPath "$DERIVED_DATA" \
     -destination "generic/platform=macOS" \

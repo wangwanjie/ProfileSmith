@@ -47,7 +47,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 
 ```bash
 xcodebuild test \
-  -project ProfileSmith.xcodeproj \
+  -workspace ProfileSmith.xcworkspace \
   -scheme ProfileSmith \
   -derivedDataPath /tmp/ProfileSmithDerivedData \
   -destination 'platform=macOS' \
