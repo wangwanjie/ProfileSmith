@@ -63,7 +63,6 @@ struct AppLaunchRegressionTests {
         let paths = try ProfileSupportPaths(bundle: .main, environment: environment)
 
         #expect(paths.embeddedQuickLookPreviewExtensionURL.lastPathComponent == "ProfileSmithQuickLookPreview.appex")
-        #expect(paths.embeddedQuickLookThumbnailExtensionURL.lastPathComponent == "ProfileSmithQuickLookThumbnail.appex")
     }
 
     @Test

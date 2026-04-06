@@ -19,7 +19,6 @@ struct ProfileSupportPaths {
     let databaseURL: URL
     let embeddedQuickLookPlugInsDirectory: URL
     let embeddedQuickLookPreviewExtensionURL: URL
-    let embeddedQuickLookThumbnailExtensionURL: URL
 
     init(bundle: Bundle = .main, environment: [String: String]) throws {
         let homeDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
@@ -76,8 +75,6 @@ struct ProfileSupportPaths {
             .appendingPathComponent("PlugIns", isDirectory: true)
         embeddedQuickLookPreviewExtensionURL = embeddedQuickLookPlugInsDirectory
             .appendingPathComponent("ProfileSmithQuickLookPreview.appex", isDirectory: true)
-        embeddedQuickLookThumbnailExtensionURL = embeddedQuickLookPlugInsDirectory
-            .appendingPathComponent("ProfileSmithQuickLookThumbnail.appex", isDirectory: true)
 
         try ensureDirectoriesExist()
     }

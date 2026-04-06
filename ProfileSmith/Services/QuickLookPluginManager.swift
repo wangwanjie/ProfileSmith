@@ -15,26 +15,38 @@ enum QuickLookPluginError: LocalizedError {
 }
 
 final class QuickLookPluginManager {
-    private enum Constants {
-        static let previewBundleIdentifier = "cn.vanjay.ProfileSmith.QuickLookPreview"
-        static let thumbnailBundleIdentifier = "cn.vanjay.ProfileSmith.QuickLookThumbnail"
-    }
+    typealias CommandRunner = (String, [String]) throws -> String
+    typealias RegisteredBundleIdentifiersProvider = () -> Set<String>
+
+    static let previewBundleIdentifier = "cn.vanjay.ProfileSmith.QuickLookPreview"
+    static let thumbnailBundleIdentifier = "cn.vanjay.ProfileSmith.QuickLookThumbnail"
 
     private let paths: ProfileSupportPaths
     private let fileManager = FileManager.default
+    private let commandRunner: CommandRunner
+    private let registeredBundleIdentifiersProvider: RegisteredBundleIdentifiersProvider
 
-    init(paths: ProfileSupportPaths) {
+    init(
+        paths: ProfileSupportPaths,
+        commandRunner: CommandRunner? = nil,
+        registeredBundleIdentifiersProvider: RegisteredBundleIdentifiersProvider? = nil
+    ) {
+        let resolvedCommandRunner = commandRunner ?? Self.runCommand
         self.paths = paths
+        self.commandRunner = resolvedCommandRunner
+        self.registeredBundleIdentifiersProvider = registeredBundleIdentifiersProvider ?? {
+            Self.registeredBundleIdentifiers(commandRunner: resolvedCommandRunner)
+        }
     }
 
     var isAvailable: Bool {
-        embeddedExtensionURLs.allSatisfy { fileManager.fileExists(atPath: $0.path) }
+        fileManager.fileExists(atPath: paths.embeddedQuickLookPreviewExtensionURL.path)
     }
 
     var isRegistered: Bool {
         guard isAvailable else { return false }
-        let registered = registeredBundleIdentifiers()
-        return registered.contains(Constants.previewBundleIdentifier) && registered.contains(Constants.thumbnailBundleIdentifier)
+        let registered = registeredBundleIdentifiersProvider()
+        return registered.contains(Self.previewBundleIdentifier)
     }
 
     func refreshRegistration() throws {
@@ -42,11 +54,11 @@ final class QuickLookPluginManager {
             throw QuickLookPluginError.embeddedExtensionsMissing
         }
 
-        for extensionURL in embeddedExtensionURLs {
-            try run(executable: "/usr/bin/pluginkit", arguments: ["-a", extensionURL.path])
-        }
-        try run(executable: "/usr/bin/qlmanage", arguments: ["-r"])
-        try run(executable: "/usr/bin/qlmanage", arguments: ["-r", "cache"])
+        _ = try commandRunner("/usr/bin/pluginkit", ["-a", paths.embeddedQuickLookPreviewExtensionURL.path])
+        _ = try commandRunner("/usr/bin/pluginkit", ["-e", "use", "-i", Self.previewBundleIdentifier])
+        _ = try? commandRunner("/usr/bin/pluginkit", ["-e", "ignore", "-i", Self.thumbnailBundleIdentifier])
+        _ = try commandRunner("/usr/bin/qlmanage", ["-r"])
+        _ = try commandRunner("/usr/bin/qlmanage", ["-r", "cache"])
     }
 
     var buttonTitle: String {
@@ -59,33 +71,23 @@ final class QuickLookPluginManager {
         return isRegistered ? L10n.quickLookReady : L10n.quickLookPending
     }
 
-    var embeddedExtensionURLs: [URL] {
-        [
-            paths.embeddedQuickLookPreviewExtensionURL,
-            paths.embeddedQuickLookThumbnailExtensionURL,
-        ]
-    }
-
-    private func registeredBundleIdentifiers() -> Set<String> {
-        guard let output = try? run(executable: "/usr/bin/pluginkit", arguments: ["-m", "-A", "-D"]) else {
+    private nonisolated static func registeredBundleIdentifiers(commandRunner: CommandRunner) -> Set<String> {
+        guard let output = try? commandRunner("/usr/bin/pluginkit", ["-m", "-A", "-D"]) else {
             return []
         }
 
         var identifiers = Set<String>()
         for line in output.split(separator: "\n") {
             let text = String(line)
-            if text.contains(Constants.previewBundleIdentifier) {
-                identifiers.insert(Constants.previewBundleIdentifier)
-            }
-            if text.contains(Constants.thumbnailBundleIdentifier) {
-                identifiers.insert(Constants.thumbnailBundleIdentifier)
+            if text.contains(Self.previewBundleIdentifier) {
+                identifiers.insert(Self.previewBundleIdentifier)
             }
         }
         return identifiers
     }
 
     @discardableResult
-    private func run(executable: String, arguments: [String]) throws -> String {
+    private nonisolated static func runCommand(executable: String, arguments: [String]) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments

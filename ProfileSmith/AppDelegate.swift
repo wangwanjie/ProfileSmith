@@ -1,12 +1,43 @@
 import Cocoa
 import Combine
 
+struct AppLaunchOpenState {
+    private(set) var hasPresentedInitialWindow = false
+    private(set) var pendingExternalURLs: [URL] = []
+
+    mutating func registerExternalOpen(_ urls: [URL], windowControllerReady: Bool) -> Bool {
+        guard !urls.isEmpty else { return false }
+        guard windowControllerReady else {
+            pendingExternalURLs.append(contentsOf: urls)
+            return false
+        }
+
+        hasPresentedInitialWindow = true
+        return true
+    }
+
+    mutating func beginInitialPresentationIfPossible(windowControllerReady: Bool) -> Bool {
+        guard windowControllerReady, !hasPresentedInitialWindow else { return false }
+        hasPresentedInitialWindow = true
+        return true
+    }
+
+    mutating func noteWindowPresented() {
+        hasPresentedInitialWindow = true
+    }
+
+    mutating func takePendingExternalURLs() -> [URL] {
+        defer { pendingExternalURLs.removeAll() }
+        return pendingExternalURLs
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var context: AppContext?
     private var mainWindowController: MainWindowController?
     private var preferencesWindowController: PreferencesWindowController?
     private var statusItemController: StatusItemController?
-    private var hasPresentedInitialWindow = false
+    private var launchOpenState = AppLaunchOpenState()
     private let environment = ProcessInfo.processInfo.environment
     private var cancellables = Set<AnyCancellable>()
 
@@ -68,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ sender: NSApplication, open urls: [URL]) {
         guard !urls.isEmpty else { return }
+        guard launchOpenState.registerExternalOpen(urls, windowControllerReady: mainWindowController != nil) else { return }
         openMainWindow(nil)
         mainWindowController?.contentController.handleExternalFiles(urls)
         activateAppBringingAllWindowsForward()
@@ -86,9 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openMainWindow(_ sender: Any?) {
-        hasPresentedInitialWindow = true
         guard let mainWindowController else { return }
+        launchOpenState.noteWindowPresented()
         present(mainWindowController: mainWindowController, sender: sender)
+        flushPendingExternalURLsIfNeeded()
     }
 
     @objc private func refreshProfiles(_ sender: Any?) {
@@ -120,11 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentInitialMainWindowIfNeeded() {
-        guard !hasPresentedInitialWindow else { return }
         guard let mainWindowController else { return }
-
-        hasPresentedInitialWindow = true
+        guard launchOpenState.beginInitialPresentationIfPossible(windowControllerReady: true) else { return }
         present(mainWindowController: mainWindowController, sender: nil)
+        flushPendingExternalURLsIfNeeded()
     }
 
     private func present(mainWindowController: MainWindowController, sender: Any?) {
@@ -141,6 +173,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func activateAppBringingAllWindowsForward() {
         NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func flushPendingExternalURLsIfNeeded() {
+        guard let mainWindowController else { return }
+        let pendingURLs = launchOpenState.takePendingExternalURLs()
+        guard !pendingURLs.isEmpty else { return }
+        mainWindowController.contentController.handleExternalFiles(pendingURLs)
+        activateAppBringingAllWindowsForward()
     }
 
     private func presentFatalError(_ error: Error) {

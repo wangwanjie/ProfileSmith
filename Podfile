@@ -27,6 +27,14 @@ post_install do |installer|
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+
+      next unless target.name == 'Pods-ProfileSmithUITests'
+
+      other_ldflags = Array(config.build_settings['OTHER_LDFLAGS'])
+      unless other_ldflags.include?('-framework') && other_ldflags.each_cons(2).any? { |flag, value| flag == '-framework' && value == 'ViewScopeServer' }
+        other_ldflags += ['-framework', 'ViewScopeServer']
+      end
+      config.build_settings['OTHER_LDFLAGS'] = other_ldflags
     end
   end
 end
