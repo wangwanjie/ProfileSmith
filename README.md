@@ -91,6 +91,12 @@ xcodebuild test \
 4. 发布 GitHub Release
 5. 生成并提交 `appcast.xml`
 
+## 1.4.1 更新
+
+- 移除 Finder Quick Look thumbnail 扩展，避免系统继续使用错误缩略图样式。
+- 修复从 Finder 通过“打开方式 -> ProfileSmith”打开描述文件时，应用只切换菜单栏但主窗口未真正前置的问题。
+- 调整文案，明确稳定预览路径为“打开方式 -> ProfileSmith”或直接拖入应用。
+
 ## 1.4.0 更新
 
 - 新增运行时多语言切换，主界面、独立预览窗口和偏好设置支持即时刷新。
