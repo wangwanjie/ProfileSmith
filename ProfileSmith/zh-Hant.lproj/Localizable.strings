@@ -64,7 +64,7 @@
 "quicklook.error.refresh_failed" = "重新整理 Finder Quick Look 失敗。";
 "quicklook.state.ready" = "Finder Quick Look 已就緒";
 "quicklook.state.pending" = "Finder Quick Look 待重新整理";
-"quicklook.panel.available" = "ProfileSmith 已內建 Finder Quick Look 擴充。點擊「%@」後，Finder 就可以對 `.ipa`、`.xcarchive`、`.app`、`.appex`、`.mobileprovision` 和 `.provisionprofile` 檔案按空白鍵快速預覽。";
+"quicklook.panel.available" = "ProfileSmith 已內建 Finder Quick Look 擴充支援，並可重新整理 Finder 註冊。對於 `.mobileprovision`、`.provisionprofile`、`.ipa`、`.xcarchive`、`.app` 和 `.appex` 檔案，建議使用「打開方式 -> ProfileSmith」或直接拖入 App 取得穩定預覽。";
 "quicklook.panel.unavailable" = "目前建置中找不到 Finder Quick Look 擴充，請先重新建置 App。";
 
 "status.indexed" = "已索引 %d 個描述檔";
@@ -104,7 +104,7 @@
 "main.preview.generating.message" = "請稍候，ProfileSmith 正在整理描述檔與簽名資訊。";
 "main.detail.parse_failed" = "解析失敗：%@";
 "main.preview.failed.title" = "預覽產生失敗";
-"main.empty.summary" = "使用說明\n\n1. 左側清單展示 `~/Library/MobileDevice/Provisioning Profiles` 和 `~/Library/Developer/Xcode/UserData/Provisioning Profiles` 中的描述檔。\n2. 支援全文搜尋、批次選取、Finder 定位、匯出、移到垃圾桶、永久刪除與檔名美化。\n3. 可以直接拖入 `.mobileprovision` / `.provisionprofile` 安裝，也可以拖入 `.ipa` / `.xcarchive` / `.appex` / `.app` 做描述檔與 Info.plist 預覽。\n4. Finder Quick Look 已隨 App 內建；若 Finder 尚未識別，可點擊頂部 `Finder Quick Look` 按鈕重新整理註冊。";
+"main.empty.summary" = "使用說明\n\n1. 左側清單展示 `~/Library/MobileDevice/Provisioning Profiles` 和 `~/Library/Developer/Xcode/UserData/Provisioning Profiles` 中的描述檔。\n2. 支援全文搜尋、批次選取、Finder 定位、匯出、移到垃圾桶、永久刪除與檔名美化。\n3. 可以直接拖入 `.mobileprovision` / `.provisionprofile` 安裝，也可以拖入 `.ipa` / `.xcarchive` / `.appex` / `.app` 做描述檔與 Info.plist 預覽。\n4. 若需要穩定預覽，建議在 Finder 中使用「打開方式 -> ProfileSmith」，或直接把檔案拖入 App。頂部 `Finder Quick Look` 按鈕僅用於重新整理 Finder 註冊。";
 "main.empty.preview.message" = "選擇一個描述檔查看詳情，或直接把檔案拖進視窗。";
 "main.bulk.title" = "已選取 %d 個描述檔";
 "main.bulk.subtitle" = "已選取多個項目，可以批次在 Finder 中顯示、移到垃圾桶或永久刪除。";

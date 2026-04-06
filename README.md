@@ -9,7 +9,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 - 详情面板展示概要、Entitlements、证书摘要和原始 plist 结构
 - 支持导入、导出、Finder 定位、移到废纸篓、彻底删除、文件名美化
 - 已声明描述文件文档类型，可在 Finder 中通过“打开方式”使用 ProfileSmith 打开 `.mobileprovision` / `.provisionprofile`
-- 内建 Finder Quick Look 扩展，使用原生 AppKit 预览描述文件、IPA、XCArchive、App、App Extension
+- 可直接在应用内预览描述文件、IPA、XCArchive、App、App Extension；对于这些文件，推荐使用“打开方式 -> ProfileSmith”或直接拖入应用获得一致预览
 - 集成 Sparkle / GitHub Releases 更新检查，并可在偏好设置里配置检查策略
 
 ## 截图
@@ -30,7 +30,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 ## 工程结构
 
 - `ProfileSmith/`: 主应用代码
-- `ProfileSmithQuickLookExtensions/`: Quick Look 预览与缩略图扩展
+- `ProfileSmithQuickLookExtensions/`: Quick Look 预览扩展
 - `ProfileSmithTests/`: 单元测试
 - `ProfileSmithUITests/`: UI 测试
 - `scripts/`: DMG、GitHub Release、appcast 相关脚本
@@ -112,7 +112,7 @@ xcodebuild test \
 
 ## 1.2.1 更新
 
-- Finder Quick Look 预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView
+- 应用内预览改为原生 AppKit 视图，不再依赖 HTML / WKWebView
 - README 新增最新主界面与预览窗口截图
 
 ## 1.2 更新

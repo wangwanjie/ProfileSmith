@@ -64,7 +64,7 @@
 "quicklook.error.refresh_failed" = "Failed to refresh Finder Quick Look.";
 "quicklook.state.ready" = "Finder Quick Look is ready";
 "quicklook.state.pending" = "Finder Quick Look needs to be refreshed";
-"quicklook.panel.available" = "ProfileSmith includes Finder Quick Look extensions. Click \"%@\" so Finder can preview `.ipa`, `.xcarchive`, `.app`, `.appex`, `.mobileprovision`, and `.provisionprofile` files with the space bar.";
+"quicklook.panel.available" = "ProfileSmith includes Finder Quick Look extension support and can refresh Finder registration. For `.mobileprovision`, `.provisionprofile`, `.ipa`, `.xcarchive`, `.app`, and `.appex` files, use “Open With -> ProfileSmith” or drag them into the app for reliable preview.";
 "quicklook.panel.unavailable" = "This build does not contain Finder Quick Look extensions. Rebuild the app first.";
 
 "status.indexed" = "Indexed %d profiles";
@@ -104,7 +104,7 @@
 "main.preview.generating.message" = "ProfileSmith is organizing profile and signing information.";
 "main.detail.parse_failed" = "Failed to parse: %@";
 "main.preview.failed.title" = "Preview generation failed";
-"main.empty.summary" = "Usage\n\n1. The left list shows profiles from `~/Library/MobileDevice/Provisioning Profiles` and `~/Library/Developer/Xcode/UserData/Provisioning Profiles`.\n2. Full-text search, batch selection, Reveal in Finder, export, Move to Trash, permanent delete, and filename beautification are supported.\n3. You can drag in `.mobileprovision` / `.provisionprofile` files to install, or `.ipa` / `.xcarchive` / `.appex` / `.app` files to preview embedded profiles and Info.plist metadata.\n4. Finder Quick Look is built in. If Finder has not picked it up yet, click the `Finder Quick Look` button at the top to refresh registration.";
+"main.empty.summary" = "Usage\n\n1. The left list shows profiles from `~/Library/MobileDevice/Provisioning Profiles` and `~/Library/Developer/Xcode/UserData/Provisioning Profiles`.\n2. Full-text search, batch selection, Reveal in Finder, export, Move to Trash, permanent delete, and filename beautification are supported.\n3. You can drag in `.mobileprovision` / `.provisionprofile` files to install, or `.ipa` / `.xcarchive` / `.appex` / `.app` files to preview embedded profiles and Info.plist metadata.\n4. For reliable preview, use “Open With -> ProfileSmith” in Finder or drag the files into the app. The `Finder Quick Look` button only refreshes Finder registration.";
 "main.empty.preview.message" = "Select a provisioning profile to inspect details, or drag files into the window.";
 "main.bulk.title" = "%d profiles selected";
 "main.bulk.subtitle" = "Multiple items are selected. You can batch reveal them in Finder, move them to Trash, or delete them permanently.";
