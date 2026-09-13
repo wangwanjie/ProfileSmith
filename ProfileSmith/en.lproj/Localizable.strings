@@ -8,7 +8,6 @@
 "menu.about" = "About ProfileSmith";
 "menu.preferences" = "Preferences…";
 "menu.check_updates" = "Check for Updates…";
-"menu.finder_quicklook" = "Finder Quick Look…";
 "menu.hide_app" = "Hide ProfileSmith";
 "menu.hide_others" = "Hide Others";
 "menu.show_all" = "Show All";
@@ -57,15 +56,6 @@
 "preferences.open_github" = "Open GitHub";
 "preferences.version" = "Current Version %@ (%@)";
 
-"quicklook.unavailable" = "Finder Quick Look Unavailable";
-"quicklook.refresh" = "Refresh Finder Quick Look";
-"quicklook.enable" = "Enable Finder Quick Look";
-"quicklook.error.missing_extensions" = "Finder Quick Look extensions were not found inside the app bundle.";
-"quicklook.error.refresh_failed" = "Failed to refresh Finder Quick Look.";
-"quicklook.state.ready" = "Finder Quick Look is ready";
-"quicklook.state.pending" = "Finder Quick Look needs to be refreshed";
-"quicklook.panel.available" = "ProfileSmith includes Finder Quick Look extension support and can refresh Finder registration. For `.mobileprovision`, `.provisionprofile`, `.ipa`, `.xcarchive`, `.app`, and `.appex` files, use “Open With -> ProfileSmith” or drag them into the app for reliable preview.";
-"quicklook.panel.unavailable" = "This build does not contain Finder Quick Look extensions. Rebuild the app first.";
 
 "status.indexed" = "Indexed %d profiles";
 "status.warning" = "%d expired, %d expiring within 30 days";
@@ -76,14 +66,13 @@
 
 "main.search_placeholder" = "Search profile contents, Bundle ID, Team, UUID…";
 "main.refresh" = "Refresh";
-"main.import_preview" = "Import / Preview…";
+"main.import" = "Import…";
 "main.loading.title" = "Loading provisioning profiles…";
 "main.loading.hint" = "The first scan or large folders may take a bit longer.";
-"main.empty.subtitle" = "Drag in profiles, IPA, XCArchive, or APPEX files, or select an existing profile from the list.";
+"main.empty.subtitle" = "Drag in provisioning profiles to import, or select an existing profile from the list.";
+"main.empty.summary" = "Usage\n\n1. The list shows profiles from `~/Library/MobileDevice/Provisioning Profiles` and `~/Library/Developer/Xcode/UserData/Provisioning Profiles`.\n2. Search, batch selection, Reveal in Finder, export, Move to Trash, permanent delete, and filename beautification are supported.\n3. Drag in `.mobileprovision` / `.provisionprofile` files to import, then select a profile to view its overview and original plist structure.\n4. In Finder, use “Open With -> ProfileSmith” to import a profile or locate an existing one.";
 "main.tab.overview" = "Overview";
 "main.tab.detail" = "Details";
-"main.tab.preview" = "Preview";
-"main.action.preview" = "Preview";
 "main.action.finder" = "Finder";
 "main.action.export" = "Export";
 "main.action.beautify_filename" = "Beautify Filename";
@@ -100,19 +89,12 @@
 "main.inspector.type" = "Type";
 "main.inspector.value" = "Value";
 "main.detail.loading" = "Parsing profile details…";
-"main.preview.generating.title" = "Generating preview";
-"main.preview.generating.message" = "ProfileSmith is organizing profile and signing information.";
 "main.detail.parse_failed" = "Failed to parse: %@";
-"main.preview.failed.title" = "Preview generation failed";
-"main.empty.summary" = "Usage\n\n1. The left list shows profiles from `~/Library/MobileDevice/Provisioning Profiles` and `~/Library/Developer/Xcode/UserData/Provisioning Profiles`.\n2. Full-text search, batch selection, Reveal in Finder, export, Move to Trash, permanent delete, and filename beautification are supported.\n3. You can drag in `.mobileprovision` / `.provisionprofile` files to install, or `.ipa` / `.xcarchive` / `.appex` / `.app` files to preview embedded profiles and Info.plist metadata.\n4. For reliable preview, use “Open With -> ProfileSmith” in Finder or drag the files into the app. The `Finder Quick Look` button only refreshes Finder registration.";
-"main.empty.preview.message" = "Select a provisioning profile to inspect details, or drag files into the window.";
 "main.bulk.title" = "%d profiles selected";
 "main.bulk.subtitle" = "Multiple items are selected. You can batch reveal them in Finder, move them to Trash, or delete them permanently.";
 "main.bulk.badge" = "Batch Actions";
 "main.bulk.team_count" = "%d Teams";
 "main.bulk.expired_count" = "%d expired";
-"main.bulk.preview.title" = "%d profiles selected";
-"main.bulk.preview.message" = "Batch actions are available. The detail tree and preview are only shown when a single item is selected.";
 "main.status.last_refresh" = "Last refreshed %@";
 "main.status.never_refreshed" = "Not refreshed yet";
 "main.status.loading_prefix" = "Loading… ";
@@ -123,7 +105,6 @@
 "main.rename.completed" = "Filename beautification finished. Refreshing index and details…";
 "main.delete.to_trash.title" = "Move selected profiles to Trash?";
 "main.delete.permanently.title" = "Delete selected profiles permanently?";
-"main.context.preview" = "Quick Preview";
 "main.context.show_in_finder" = "Reveal in Finder";
 "main.context.copy_path" = "Copy Path";
 "main.context.copy_row" = "Copy Row";
@@ -187,49 +168,8 @@
 "display.profile_type.enterprise" = "Enterprise";
 "display.platform.ios" = "iOS";
 "display.platform.mac" = "Mac";
-"display.file_type.ios_profile" = "iOS Profile";
-"display.file_type.mac_profile" = "Mac Profile";
-"display.file_type.file" = "File";
 
 "parser.unsupported_file" = "Unsupported provisioning file format: %@";
 "parser.unreadable_data" = "Unable to read file: %@";
 "parser.missing_embedded_plist" = "No parseable plist found in file: %@";
 "parser.malformed_property_list" = "Malformed plist structure: %@";
-"parser.missing_application_bundle" = "No application bundle found: %@";
-
-"preview.window.tab.overview" = "Overview";
-"preview.window.tab.profile" = "Profile";
-"preview.window.tab.info_plist" = "Info.plist";
-"preview.window.copy_selected_rows" = "Copy Selected Rows";
-"preview.window.column.key" = "Key";
-"preview.window.column.type" = "Type";
-"preview.window.column.value" = "Value";
-"preview.window.row.file" = "File";
-"preview.window.row.name" = "Name";
-"preview.window.row.bundle_id" = "Bundle ID";
-"preview.window.row.app_id_name" = "App ID Name";
-"preview.window.row.team" = "Team";
-"preview.window.row.team_id" = "Team ID";
-"preview.window.row.type" = "Type";
-"preview.window.row.platform" = "Platform";
-"preview.window.row.uuid" = "UUID";
-"preview.window.row.created" = "Created";
-"preview.window.row.expires" = "Expires";
-"preview.window.row.application_id" = "Application ID";
-"preview.window.row.certificates" = "Certificates";
-"preview.window.row.devices" = "Devices";
-"preview.window.row.embedded_profile" = "Embedded Profile";
-"preview.window.row.info_plist" = "Info.plist";
-"preview.window.no_embedded_profile" = "No Embedded Profile";
-"preview.window.availability.available" = "Available";
-"preview.window.availability.unavailable" = "Unavailable";
-
-"preview.html.badge" = "Preview";
-"preview.html.subtitle" = "View the profile summary, entitlements, Info.plist, and certificate digest in the current window.";
-"preview.html.section.overview" = "Overview";
-"preview.html.section.entitlements" = "Entitlements";
-"preview.html.section.info_plist" = "Info.plist";
-"preview.html.section.certificates" = "Certificates";
-"preview.html.empty.entitlements" = "No entitlements available.";
-"preview.html.empty.info_plist" = "No Info.plist data available.";
-"preview.html.empty.certificates" = "No certificate data available.";

@@ -15,7 +15,6 @@ enum L10n {
     static var menuAbout: String { tr("menu.about") }
     static var menuPreferences: String { tr("menu.preferences") }
     static var menuCheckForUpdates: String { tr("menu.check_updates") }
-    static var menuFinderQuickLook: String { tr("menu.finder_quicklook") }
     static var menuHideApp: String { tr("menu.hide_app") }
     static var menuHideOthers: String { tr("menu.hide_others") }
     static var menuShowAll: String { tr("menu.show_all") }
@@ -53,16 +52,6 @@ enum L10n {
     static var preferencesCheckForUpdates: String { tr("preferences.check_updates") }
     static var preferencesOpenGitHub: String { tr("preferences.open_github") }
 
-    static var quickLookUnavailable: String { tr("quicklook.unavailable") }
-    static var quickLookRefresh: String { tr("quicklook.refresh") }
-    static var quickLookEnable: String { tr("quicklook.enable") }
-    static var quickLookMissingExtensions: String { tr("quicklook.error.missing_extensions") }
-    static var quickLookRefreshFailed: String { tr("quicklook.error.refresh_failed") }
-    static var quickLookReady: String { tr("quicklook.state.ready") }
-    static var quickLookPending: String { tr("quicklook.state.pending") }
-    static func quickLookPanelAvailable(_ actionTitle: String) -> String { tr("quicklook.panel.available", actionTitle) }
-    static var quickLookPanelUnavailable: String { tr("quicklook.panel.unavailable") }
-
     static func statusIndexed(_ count: Int) -> String { tr("status.indexed", count) }
     static func statusWarning(expired: Int, expiringSoon: Int) -> String { tr("status.warning", expired, expiringSoon) }
     static var statusOpen: String { tr("status.open") }
@@ -72,14 +61,12 @@ enum L10n {
 
     static var mainSearchPlaceholder: String { tr("main.search_placeholder") }
     static var mainRefresh: String { tr("main.refresh") }
-    static var mainImportPreview: String { tr("main.import_preview") }
+    static var mainImport: String { tr("main.import") }
     static var mainLoadingTitle: String { tr("main.loading.title") }
     static var mainLoadingHint: String { tr("main.loading.hint") }
     static var mainEmptySubtitle: String { tr("main.empty.subtitle") }
     static var mainTabOverview: String { tr("main.tab.overview") }
     static var mainTabDetail: String { tr("main.tab.detail") }
-    static var mainTabPreview: String { tr("main.tab.preview") }
-    static var mainActionPreview: String { tr("main.action.preview") }
     static var mainActionFinder: String { tr("main.action.finder") }
     static var mainActionExport: String { tr("main.action.export") }
     static var mainActionBeautifyFilename: String { tr("main.action.beautify_filename") }
@@ -96,19 +83,13 @@ enum L10n {
     static var mainInspectorType: String { tr("main.inspector.type") }
     static var mainInspectorValue: String { tr("main.inspector.value") }
     static var mainDetailLoading: String { tr("main.detail.loading") }
-    static var mainPreviewGeneratingTitle: String { tr("main.preview.generating.title") }
-    static var mainPreviewGeneratingMessage: String { tr("main.preview.generating.message") }
     static func mainDetailParseFailed(_ message: String) -> String { tr("main.detail.parse_failed", message) }
-    static var mainPreviewFailedTitle: String { tr("main.preview.failed.title") }
     static var mainEmptySummary: String { tr("main.empty.summary") }
-    static var mainEmptyPreviewMessage: String { tr("main.empty.preview.message") }
     static func mainBulkTitle(_ count: Int) -> String { tr("main.bulk.title", count) }
     static var mainBulkSubtitle: String { tr("main.bulk.subtitle") }
     static var mainBulkBadge: String { tr("main.bulk.badge") }
     static func mainBulkTeamCount(_ count: Int) -> String { tr("main.bulk.team_count", count) }
     static func mainBulkExpiredCount(_ count: Int) -> String { tr("main.bulk.expired_count", count) }
-    static func mainBulkPreviewTitle(_ count: Int) -> String { tr("main.bulk.preview.title", count) }
-    static var mainBulkPreviewMessage: String { tr("main.bulk.preview.message") }
     static func mainLastRefresh(_ timestamp: String) -> String { tr("main.status.last_refresh", timestamp) }
     static var mainNeverRefreshed: String { tr("main.status.never_refreshed") }
     static var mainLoadingPrefix: String { tr("main.status.loading_prefix") }
@@ -123,7 +104,6 @@ enum L10n {
     static var mainRenameCompleted: String { tr("main.rename.completed") }
     static var mainDeleteToTrashTitle: String { tr("main.delete.to_trash.title") }
     static var mainDeletePermanentlyTitle: String { tr("main.delete.permanently.title") }
-    static var mainContextPreview: String { tr("main.context.preview") }
     static var mainContextShowInFinder: String { tr("main.context.show_in_finder") }
     static var mainContextCopyPath: String { tr("main.context.copy_path") }
     static var mainContextCopyRow: String { tr("main.context.copy_row") }
@@ -187,52 +167,11 @@ enum L10n {
     static var displayProfileTypeEnterprise: String { tr("display.profile_type.enterprise") }
     static var displayPlatformIOS: String { tr("display.platform.ios") }
     static var displayPlatformMac: String { tr("display.platform.mac") }
-    static var displayFileTypeIOSProfile: String { tr("display.file_type.ios_profile") }
-    static var displayFileTypeMacProfile: String { tr("display.file_type.mac_profile") }
-    static var displayFileTypeFile: String { tr("display.file_type.file") }
 
     static func parserUnsupportedFile(_ fileName: String) -> String { tr("parser.unsupported_file", fileName) }
     static func parserUnreadableData(_ filePath: String) -> String { tr("parser.unreadable_data", filePath) }
     static func parserMissingEmbeddedPlist(_ fileName: String) -> String { tr("parser.missing_embedded_plist", fileName) }
     static func parserMalformedPropertyList(_ fileName: String) -> String { tr("parser.malformed_property_list", fileName) }
-    static func parserMissingApplicationBundle(_ filePath: String) -> String { tr("parser.missing_application_bundle", filePath) }
-
-    static var previewWindowTabOverview: String { tr("preview.window.tab.overview") }
-    static var previewWindowTabProfile: String { tr("preview.window.tab.profile") }
-    static var previewWindowTabInfoPlist: String { tr("preview.window.tab.info_plist") }
-    static var previewWindowCopySelectedRows: String { tr("preview.window.copy_selected_rows") }
-    static var previewWindowColumnKey: String { tr("preview.window.column.key") }
-    static var previewWindowColumnType: String { tr("preview.window.column.type") }
-    static var previewWindowColumnValue: String { tr("preview.window.column.value") }
-    static var previewWindowRowFile: String { tr("preview.window.row.file") }
-    static var previewWindowRowName: String { tr("preview.window.row.name") }
-    static var previewWindowRowBundleID: String { tr("preview.window.row.bundle_id") }
-    static var previewWindowRowAppIDName: String { tr("preview.window.row.app_id_name") }
-    static var previewWindowRowTeam: String { tr("preview.window.row.team") }
-    static var previewWindowRowTeamID: String { tr("preview.window.row.team_id") }
-    static var previewWindowRowType: String { tr("preview.window.row.type") }
-    static var previewWindowRowPlatform: String { tr("preview.window.row.platform") }
-    static var previewWindowRowUUID: String { tr("preview.window.row.uuid") }
-    static var previewWindowRowCreated: String { tr("preview.window.row.created") }
-    static var previewWindowRowExpires: String { tr("preview.window.row.expires") }
-    static var previewWindowRowApplicationID: String { tr("preview.window.row.application_id") }
-    static var previewWindowRowCertificates: String { tr("preview.window.row.certificates") }
-    static var previewWindowRowDevices: String { tr("preview.window.row.devices") }
-    static var previewWindowRowEmbeddedProfile: String { tr("preview.window.row.embedded_profile") }
-    static var previewWindowRowInfoPlist: String { tr("preview.window.row.info_plist") }
-    static var previewWindowNoEmbeddedProfile: String { tr("preview.window.no_embedded_profile") }
-    static var previewWindowAvailabilityAvailable: String { tr("preview.window.availability.available") }
-    static var previewWindowAvailabilityUnavailable: String { tr("preview.window.availability.unavailable") }
-
-    static var previewHTMLBadge: String { tr("preview.html.badge") }
-    static var previewHTMLSubtitle: String { tr("preview.html.subtitle") }
-    static var previewHTMLSectionOverview: String { tr("preview.html.section.overview") }
-    static var previewHTMLSectionEntitlements: String { tr("preview.html.section.entitlements") }
-    static var previewHTMLSectionInfoPlist: String { tr("preview.html.section.info_plist") }
-    static var previewHTMLSectionCertificates: String { tr("preview.html.section.certificates") }
-    static var previewHTMLEmptyEntitlements: String { tr("preview.html.empty.entitlements") }
-    static var previewHTMLEmptyInfoPlist: String { tr("preview.html.empty.info_plist") }
-    static var previewHTMLEmptyCertificates: String { tr("preview.html.empty.certificates") }
 
     static var updateStrategyManual: String { tr("settings.update.manual") }
     static var updateStrategyDaily: String { tr("settings.update.daily") }
@@ -294,22 +233,4 @@ enum L10n {
         }
     }
 
-    static func localizedFileType(for pathExtension: String) -> String {
-        switch pathExtension.lowercased() {
-        case "ipa":
-            return "IPA"
-        case "xcarchive":
-            return "XCArchive"
-        case "app":
-            return "APP"
-        case "appex":
-            return "APPEX"
-        case "mobileprovision":
-            return displayFileTypeIOSProfile
-        case "provisionprofile":
-            return displayFileTypeMacProfile
-        default:
-            return displayFileTypeFile
-        }
-    }
 }

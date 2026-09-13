@@ -51,21 +51,6 @@ struct AppLaunchRegressionTests {
     }
 
     @Test
-    func quickLookPathsUseEmbeddedProfileSmithExtensionNames() throws {
-        let temporaryDirectory = try TestTemporaryDirectory()
-        defer { temporaryDirectory.cleanup() }
-
-        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
-        let environment = [
-            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
-        ]
-
-        let paths = try ProfileSupportPaths(bundle: .main, environment: environment)
-
-        #expect(paths.embeddedQuickLookPreviewExtensionURL.lastPathComponent == "ProfileSmithQuickLookPreview.appex")
-    }
-
-    @Test
     func appInfoDeclaresProvisioningProfileDocumentTypes() throws {
         let documentTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleDocumentTypes") as? [[String: Any]] ?? []
         let declaredContentTypes = documentTypes

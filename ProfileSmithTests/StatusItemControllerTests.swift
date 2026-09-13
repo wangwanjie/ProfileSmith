@@ -21,9 +21,7 @@ struct StatusItemControllerTests {
 
         AppLocalization.shared.setLanguage(.simplifiedChinese)
         let chineseContent = StatusItemMenuContent(
-            snapshot: snapshot,
-            quickLookButtonTitle: L10n.quickLookRefresh,
-            quickLookAvailable: true
+            snapshot: snapshot
         )
 
         #expect(chineseContent.buttonTitle == "PS !1")
@@ -33,9 +31,7 @@ struct StatusItemControllerTests {
 
         AppLocalization.shared.setLanguage(.english)
         let englishContent = StatusItemMenuContent(
-            snapshot: snapshot,
-            quickLookButtonTitle: L10n.quickLookRefresh,
-            quickLookAvailable: true
+            snapshot: snapshot
         )
 
         #expect(englishContent.buttonTitle == "PS !1")

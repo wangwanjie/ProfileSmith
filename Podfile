@@ -1,4 +1,4 @@
-platform :osx, '11.0'
+platform :osx, '12.0'
 
 project 'ProfileSmith.xcodeproj'
 
@@ -13,11 +13,11 @@ target 'ProfileSmith' do
   pod 'ViewScopeServer', :git => 'https://github.com/wangwanjie/ViewScope.git', :branch => 'main', :configurations => ['Debug']
 
   target 'ProfileSmithTests' do
-    inherit! :search_paths
+    inherit! :complete
   end
 
   target 'ProfileSmithUITests' do
-    inherit! :search_paths
+    inherit! :complete
   end
 
 end
@@ -25,7 +25,7 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
-      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
 
       next unless target.name == 'Pods-ProfileSmithUITests'

@@ -18,18 +18,16 @@ final class ProfileRepository {
     private let database: ProfileDatabase
     private let scanner: ProfileScanner
     private let parser: MobileProvisionParser
-    private let archiveInspector: ArchiveInspector
     private let workQueue = DispatchQueue(label: "cn.vanjay.ProfileSmith.repository", qos: .userInitiated)
 
     private var query = ProfileQuery()
     private var pendingRefreshRequested = false
     private var pendingRefreshForceReindex = false
 
-    init(database: ProfileDatabase, scanner: ProfileScanner, parser: MobileProvisionParser, archiveInspector: ArchiveInspector) {
+    init(database: ProfileDatabase, scanner: ProfileScanner, parser: MobileProvisionParser) {
         self.database = database
         self.scanner = scanner
         self.parser = parser
-        self.archiveInspector = archiveInspector
     }
 
     func start() {
@@ -102,10 +100,6 @@ final class ProfileRepository {
             displayName: record.sourceName
         )
         return try parser.parseProfile(at: URL(fileURLWithPath: record.path), sourceLocation: sourceLocation)
-    }
-
-    func inspectArchive(at url: URL) throws -> PreviewInspection {
-        try archiveInspector.inspect(url: url)
     }
 
     private func reloadFromDatabase(lastRefreshDate: Date?) {

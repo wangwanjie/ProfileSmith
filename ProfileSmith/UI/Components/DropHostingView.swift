@@ -86,6 +86,6 @@ final class DropHostingView: NSView {
 
     nonisolated static func supportsFileURL(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
-        return ["mobileprovision", "provisionprofile", "ipa", "xcarchive", "appex", "app"].contains(ext)
+        return ["mobileprovision", "provisionprofile"].contains(ext)
     }
 }

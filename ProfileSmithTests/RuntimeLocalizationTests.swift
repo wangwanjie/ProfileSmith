@@ -46,8 +46,12 @@ struct RuntimeLocalizationTests {
         let tabControl: NSSegmentedControl = try reflectedValue(named: "tabControl", from: controller)
 
         #expect(refreshButton.title == "刷新")
-        #expect(importButton.title == "导入/预览…")
-        #expect(controller.debugSubtitleLabel.stringValue == "拖入描述文件、IPA、XCArchive 或 APPEX，或在左侧选择已有描述文件。")
+        #expect(importButton.title == "导入…")
+        #expect(tabControl.segmentCount == 2)
+        #expect(controller.debugTableView.doubleAction == nil)
+        let tabs: NSTabView = try reflectedValue(named: "tabView", from: controller)
+        #expect(tabs.tabViewItems.compactMap { $0.identifier as? String } == ["overview", "detail"])
+        #expect(controller.debugSubtitleLabel.stringValue == "拖入描述文件进行导入，或在左侧选择已有描述文件。")
         #expect(searchField.placeholderString == "全文搜索描述文件内容、Bundle ID、Team、UUID…")
         #expect(tabControl.label(forSegment: 0) == "概要")
 
@@ -67,8 +71,8 @@ struct RuntimeLocalizationTests {
             }
         ) {
             return refreshButton.title == "Refresh"
-                && importButton.title == "Import / Preview…"
-                && controller.debugSubtitleLabel.stringValue == "Drag in profiles, IPA, XCArchive, or APPEX files, or select an existing profile from the list."
+                && importButton.title == "Import…"
+                && controller.debugSubtitleLabel.stringValue == "Drag in provisioning profiles to import, or select an existing profile from the list."
                 && searchField.placeholderString == "Search profile contents, Bundle ID, Team, UUID…"
                 && tabControl.label(forSegment: 0) == "Overview"
                 && controller.debugStatusLabel.stringValue.contains("Results 0")

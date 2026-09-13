@@ -398,6 +398,7 @@ xcodebuild \
     -destination "generic/platform=macOS" \
     ARCHS="arm64 x86_64" \
     ONLY_ACTIVE_ARCH=NO \
+    clean \
     build
 
 if [[ ! -d "$APP_PATH" ]]; then
@@ -413,6 +414,8 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 rm -f "$DMG_PATH"
 echo "creating DMG: $DMG_PATH"
 create_pretty_dmg "$APP_PATH" "$DMG_PATH" "$VOLUME_NAME"
+codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG_PATH"
+codesign --verify --strict --verbose=2 "$DMG_PATH"
 
 if [[ "$DO_NOTARIZE" == true ]]; then
     echo "submitting DMG for notarization"

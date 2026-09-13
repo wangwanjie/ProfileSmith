@@ -3,46 +3,14 @@ import Testing
 @testable import ProfileSmith
 
 struct ArchiveAndFileOperationsTests {
-    @Test
-    func archiveInspectorReadsAppBundleAndIPA() throws {
-        let temporaryDirectory = try TestTemporaryDirectory()
-        defer { temporaryDirectory.cleanup() }
+    @Test(arguments: ["ipa", "IPA", "xcarchive", "XCARCHIVE", "app", "APP", "appex", "APPEX"])
+    func removedPreviewFormatsCannotBeDropped(_ pathExtension: String) {
+        #expect(!DropHostingView.supportsFileURL(URL(fileURLWithPath: "/tmp/Unsupported.\(pathExtension)")))
+    }
 
-        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
-            to: temporaryDirectory.url,
-            fileName: "embedded",
-            name: "Embedded Profile",
-            uuid: "ARCHIVE-AAAA-BBBB-CCCC-DDDD",
-            teamName: "Archive Team",
-            teamIdentifier: "ARCH1234",
-            bundleIdentifier: "com.example.archive"
-        )
-        let appURL = try TestFixtureFactory.writeApplicationBundle(
-            to: temporaryDirectory.url,
-            appName: "ArchiveApp",
-            displayName: "Archive App",
-            bundleIdentifier: "com.example.archive",
-            embeddedProfileURL: embeddedProfileURL
-        )
-        let ipaURL = try TestFixtureFactory.writeIPA(
-            to: temporaryDirectory.url,
-            name: "ArchivePayload",
-            appDisplayName: "Archive Payload",
-            bundleIdentifier: "com.example.payload",
-            embeddedProfileURL: embeddedProfileURL
-        )
-
-        let inspector = ArchiveInspector(parser: MobileProvisionParser())
-
-        let appInspection = try inspector.inspect(url: appURL)
-        #expect(appInspection.title == "Archive App")
-        #expect(appInspection.infoPlist?["CFBundleIdentifier"] as? String == "com.example.archive")
-        #expect(appInspection.parsedProfile?.record.bundleIdentifier == "com.example.archive")
-
-        let ipaInspection = try inspector.inspect(url: ipaURL)
-        #expect(ipaInspection.title == "Archive Payload")
-        #expect(ipaInspection.parsedProfile?.record.displayName == "Embedded Profile")
-        #expect(ipaInspection.quickLookHTML.contains("Archive Payload"))
+    @Test(arguments: ["mobileprovision", "provisionprofile", "MOBILEPROVISION", "PROVISIONPROFILE"])
+    func provisioningProfilesCanBeDroppedForImport(_ pathExtension: String) {
+        #expect(DropHostingView.supportsFileURL(URL(fileURLWithPath: "/tmp/Supported.\(pathExtension)")))
     }
 
     @Test

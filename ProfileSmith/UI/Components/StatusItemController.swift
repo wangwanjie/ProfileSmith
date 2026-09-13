@@ -4,7 +4,6 @@ import Combine
 enum StatusItemMenuAction {
     case openMainWindow
     case refresh
-    case toggleQuickLookPlugin
     case checkForUpdates
     case quit
 }
@@ -36,7 +35,7 @@ struct StatusItemMenuContent {
     let buttonTitle: String
     let entries: [StatusItemMenuEntry]
 
-    init(snapshot: RepositorySnapshot, quickLookButtonTitle: String, quickLookAvailable: Bool) {
+    init(snapshot: RepositorySnapshot) {
         buttonTitle = snapshot.metrics.expiredCount > 0 ? "PS !\(snapshot.metrics.expiredCount)" : "PS"
         entries = [
             StatusItemMenuEntry(title: L10n.statusIndexed(snapshot.metrics.totalCount), action: nil, isEnabled: false),
@@ -48,7 +47,6 @@ struct StatusItemMenuContent {
             .separator,
             StatusItemMenuEntry(title: L10n.statusOpen, action: .openMainWindow),
             StatusItemMenuEntry(title: L10n.statusRefresh, action: .refresh),
-            StatusItemMenuEntry(title: quickLookButtonTitle, action: .toggleQuickLookPlugin, isEnabled: quickLookAvailable),
             StatusItemMenuEntry(title: L10n.statusCheckForUpdates, action: .checkForUpdates),
             .separator,
             StatusItemMenuEntry(title: L10n.statusQuit, action: .quit),
@@ -65,19 +63,16 @@ final class StatusItemController {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let repository: ProfileRepository
     private let updateManager: UpdateManager
-    private let quickLookPluginManager: QuickLookPluginManager
     private let openMainWindowHandler: () -> Void
     private var cancellables = Set<AnyCancellable>()
 
     init(
         repository: ProfileRepository,
         updateManager: UpdateManager,
-        quickLookPluginManager: QuickLookPluginManager,
         openMainWindowHandler: @escaping () -> Void
     ) {
         self.repository = repository
         self.updateManager = updateManager
-        self.quickLookPluginManager = quickLookPluginManager
         self.openMainWindowHandler = openMainWindowHandler
 
         configureStatusItem()
@@ -109,9 +104,7 @@ final class StatusItemController {
 
     private func rebuildMenu(with snapshot: RepositorySnapshot) {
         let content = StatusItemMenuContent(
-            snapshot: snapshot,
-            quickLookButtonTitle: quickLookPluginManager.buttonTitle,
-            quickLookAvailable: quickLookPluginManager.isAvailable
+            snapshot: snapshot
         )
         let menu = NSMenu()
 
@@ -137,8 +130,6 @@ final class StatusItemController {
             return #selector(openMainWindow)
         case .refresh:
             return #selector(refresh)
-        case .toggleQuickLookPlugin:
-            return #selector(toggleQuickLookPlugin)
         case .checkForUpdates:
             return #selector(checkForUpdates)
         case .quit:
@@ -152,7 +143,7 @@ final class StatusItemController {
         switch action {
         case .quit:
             return NSApp
-        case .openMainWindow, .refresh, .toggleQuickLookPlugin, .checkForUpdates:
+        case .openMainWindow, .refresh, .checkForUpdates:
             return self
         case nil:
             return nil
@@ -165,15 +156,6 @@ final class StatusItemController {
 
     @objc private func refresh() {
         repository.refresh(forceReindex: false)
-    }
-
-    @objc private func toggleQuickLookPlugin() {
-        do {
-            try quickLookPluginManager.refreshRegistration()
-            rebuildMenu(with: repository.snapshot)
-        } catch {
-            NSApp.presentError(error)
-        }
     }
 
     @objc private func checkForUpdates() {

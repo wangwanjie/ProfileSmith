@@ -59,8 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !isUITesting {
                 let statusItemController = StatusItemController(
                     repository: context.repository,
-                    updateManager: context.updateManager,
-                    quickLookPluginManager: context.quickLookPluginManager
+                    updateManager: context.updateManager
                 ) { [weak self] in
                     self?.openMainWindow(nil)
                 }
@@ -140,10 +139,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferencesWindowController?.showPreferencesWindow()
     }
 
-    @objc private func openQuickLookPluginManager(_ sender: Any?) {
-        mainWindowController?.contentController.presentQuickLookPluginPanel(sender)
-    }
-
     @objc private func openGitHubHomepage(_ sender: Any?) {
         context?.updateManager.openGitHubHomepage()
     }
@@ -211,10 +206,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let updateItem = NSMenuItem(title: L10n.menuCheckForUpdates, action: #selector(checkForUpdates(_:)), keyEquivalent: "")
         updateItem.target = self
         appMenu.addItem(updateItem)
-        appMenu.addItem(NSMenuItem.separator())
-        let pluginItem = NSMenuItem(title: L10n.menuFinderQuickLook, action: #selector(openQuickLookPluginManager(_:)), keyEquivalent: "")
-        pluginItem.target = self
-        appMenu.addItem(pluginItem)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: L10n.menuHideApp, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
         appMenu.addItem(NSMenuItem(title: L10n.menuHideOthers, action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h"))

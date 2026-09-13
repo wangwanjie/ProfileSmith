@@ -17,8 +17,6 @@ struct ProfileSupportPaths {
     let renameBackupDirectory: URL
     let applicationSupportDirectory: URL
     let databaseURL: URL
-    let embeddedQuickLookPlugInsDirectory: URL
-    let embeddedQuickLookPreviewExtensionURL: URL
 
     init(bundle: Bundle = .main, environment: [String: String]) throws {
         let homeDirectory = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
@@ -68,13 +66,6 @@ struct ProfileSupportPaths {
         }
         self.applicationSupportDirectory = applicationSupportDirectory
         databaseURL = applicationSupportDirectory.appendingPathComponent("ProfileSmith.sqlite", isDirectory: false)
-
-        embeddedQuickLookPlugInsDirectory = bundle.builtInPlugInsURL
-            ?? bundle.bundleURL
-            .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("PlugIns", isDirectory: true)
-        embeddedQuickLookPreviewExtensionURL = embeddedQuickLookPlugInsDirectory
-            .appendingPathComponent("ProfileSmithQuickLookPreview.appex", isDirectory: true)
 
         try ensureDirectoriesExist()
     }

@@ -45,7 +45,7 @@
 		</dict>
 	</array>
 	<key>LSMinimumSystemVersion</key>
-	<string>10.15</string>
+	<string>12.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 VanJay. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
