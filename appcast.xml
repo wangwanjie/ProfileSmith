@@ -3,6 +3,22 @@
     <channel>
         <title>ProfileSmith</title>
         <item>
+            <title>1.4.2</title>
+            <pubDate>Sun, 13 Sep 2026 18:40:33 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.4.2</link>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>1.4.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.4.2
+
+- 移除所有文件预览功能，涵盖 IPA、XCArchive、描述文件、App 和 App Extension。
+- 移除应用内预览页、独立预览窗口、预览快捷入口、Finder Quick Look 扩展及相关构建代码。
+- 保留描述文件导入、索引、概要、原始 plist 结构和批量管理功能，同步更新三种语言的使用说明。
+- 最低系统要求调整为 macOS 12.0。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.4.2/ProfileSmith_V_1.4.2.dmg" length="6532464" type="application/octet-stream" sparkle:edSignature="ackqSrFdz30NIOg5O7koH9rXBkojBRd4LrgVT8LM7eMJJuBFPSNtWG2ArFTI9Il6Lh13oN2OWwM+v7jDHYVLAQ==" />
+        </item>
+        <item>
             <title>1.4.1</title>
             <pubDate>Mon, 06 Apr 2026 14:40:50 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.4.1</link>
