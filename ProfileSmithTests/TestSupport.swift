@@ -54,6 +54,62 @@ enum TestFixtureFactory {
         return profileURL
     }
 
+    static func writeApplicationBundle(
+        to directoryURL: URL,
+        appName: String,
+        displayName: String,
+        bundleIdentifier: String,
+        embeddedProfileURL: URL?
+    ) throws -> URL {
+        let appURL = directoryURL.appendingPathComponent(appName).appendingPathExtension("app")
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+
+        let infoPlist: [String: Any] = [
+            "CFBundleDisplayName": displayName,
+            "CFBundleIdentifier": bundleIdentifier,
+            "CFBundleName": appName,
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "1.0",
+            "CFBundleVersion": "1",
+        ]
+        let infoData = try PropertyListSerialization.data(fromPropertyList: infoPlist, format: .xml, options: 0)
+        try infoData.write(to: appURL.appendingPathComponent("Info.plist"))
+
+        if let embeddedProfileURL {
+            try FileManager.default.copyItem(
+                at: embeddedProfileURL,
+                to: appURL.appendingPathComponent("embedded.mobileprovision")
+            )
+        }
+
+        return appURL
+    }
+
+    static func writeIPA(
+        to directoryURL: URL,
+        name: String,
+        appDisplayName: String,
+        bundleIdentifier: String,
+        embeddedProfileURL: URL?
+    ) throws -> URL {
+        let payloadDirectory = directoryURL.appendingPathComponent("Payload", isDirectory: true)
+        try FileManager.default.createDirectory(at: payloadDirectory, withIntermediateDirectories: true)
+        _ = try writeApplicationBundle(
+            to: payloadDirectory,
+            appName: name,
+            displayName: appDisplayName,
+            bundleIdentifier: bundleIdentifier,
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let ipaURL = directoryURL.appendingPathComponent(name).appendingPathExtension("ipa")
+        try runProcess(
+            executable: "/usr/bin/ditto",
+            arguments: ["-c", "-k", "--sequesterRsrc", "--keepParent", payloadDirectory.path, ipaURL.path]
+        )
+        return ipaURL
+    }
+
     static func makeRecord(
         path: String,
         name: String,
@@ -145,4 +201,18 @@ enum TestFixtureFactory {
         return data
     }
 
+    private static func runProcess(executable: String, arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            throw NSError(
+                domain: "ProfileSmithTests.Process",
+                code: Int(process.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: "Process failed: \(executable) \(arguments.joined(separator: " "))"]
+            )
+        }
+    }
 }

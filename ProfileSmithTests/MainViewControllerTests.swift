@@ -102,7 +102,7 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
-    func detailSelectionDoesNotShiftSplitViewWidthAndLoadsSummary() throws {
+    func detailSelectionDoesNotShiftSplitViewWidthAndPreviewCompletesRendering() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
 
@@ -170,11 +170,11 @@ struct MainViewControllerTests {
         #expect(initialWidth >= controller.debugNameColumnMinWidth)
 
         try controller.debugLoadDetailsSynchronously(for: shortRecord)
-        #expect(controller.debugSummaryTextView.string.contains("Short Name"))
+        #expect(controller.debugPreviewText.contains("Short Name"))
         let shortWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
 
         try controller.debugLoadDetailsSynchronously(for: longRecord)
-        #expect(controller.debugSummaryTextView.string.contains("A Very Long Provisioning Profile Name"))
+        #expect(controller.debugPreviewText.contains("A Very Long Provisioning Profile Name"))
         let longWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
 
         #expect(abs(initialWidth - shortWidth) < 1)
@@ -352,7 +352,53 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
-    func mainTableSupportsCopyingSelectedRows() throws {
+    func previewWindowControllerLoadsProfileAndInfoTabs() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "embedded",
+            name: "Embedded Preview",
+            uuid: "PREVIEW-AAAA-BBBB-CCCC-DDDD",
+            teamName: "Preview Team",
+            teamIdentifier: "PREV1234",
+            bundleIdentifier: "com.example.preview"
+        )
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewHost",
+            displayName: "Preview Host",
+            bundleIdentifier: "com.example.preview.host",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let controller = PreviewWindowController(inspection: inspection)
+
+        #expect(controller.debugTitleLabel.stringValue == "Preview Host")
+        #expect(controller.debugOverviewRows.contains(where: { $0.contains("名称: Preview Host") }))
+        #expect(controller.debugOverviewRows.contains(where: { $0.contains("描述文件: Embedded Preview") }))
+
+        controller.debugSelectSegment(1)
+        #expect(controller.debugProfileOutlineView.numberOfRows > 0)
+
+        controller.debugSelectSegment(2)
+        #expect(controller.debugInfoOutlineView.numberOfRows > 0)
+    }
+
+    @MainActor
+    @Test
+    func htmlPreviewViewDisablesReloadMenuAction() {
+        let previewView = HTMLPreviewView(frame: NSRect(x: 0, y: 0, width: 480, height: 320))
+        previewView.loadHTMLString("<html><body><h1>Preview</h1></body></html>", baseURL: nil)
+
+        #expect(previewView.debugReloadActionEnabled == false)
+    }
+
+    @MainActor
+    @Test
+    func mainTableAndPreviewWindowSupportCopyingSelectedRows() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
 
@@ -400,6 +446,26 @@ struct MainViewControllerTests {
         #expect(mainCopy.contains("Copy Ready"))
         #expect(mainCopy.contains("com.example.copy"))
 
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewCopyHost",
+            displayName: "Preview Copy Host",
+            bundleIdentifier: "com.example.preview.copy",
+            embeddedProfileURL: embeddedProfileURL
+        )
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let previewController = PreviewWindowController(inspection: inspection)
+
+        previewController.debugSelectOverviewRows(IndexSet(integer: 0))
+        previewController.debugCopyOverviewSelection()
+        let overviewCopy = NSPasteboard.general.string(forType: .string) ?? ""
+        #expect(overviewCopy.contains("文件"))
+
+        previewController.debugSelectSegment(1)
+        previewController.debugSelectProfileRows(IndexSet(integer: 0))
+        previewController.debugCopyProfileSelection()
+        let profileCopy = NSPasteboard.general.string(forType: .string) ?? ""
+        #expect(!profileCopy.isEmpty)
     }
 
     @MainActor
@@ -729,7 +795,7 @@ struct MainViewControllerTests {
 
     @MainActor
     @Test
-    func mainViewReappliesResolvedBackgroundColorsWhenAppearanceChanges() throws {
+    func mainViewAndEmbeddedPreviewReapplyResolvedBackgroundColorsWhenAppearanceChanges() throws {
         let temporaryDirectory = try TestTemporaryDirectory()
         defer { temporaryDirectory.cleanup() }
 
@@ -758,25 +824,160 @@ struct MainViewControllerTests {
         try waitUntil(
             description: "dark appearance applied to main view backgrounds",
             debugState: {
-                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor))"
+                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor)) preview=\(String(describing: controller.debugPreviewBackgroundColor))"
             }
         ) {
             colorsMatch(controller.debugMainBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.view.effectiveAppearance)
                 && colorsMatch(controller.debugLoadingOverlayBackgroundColor, expected: NSColor.windowBackgroundColor, alpha: 0.72, appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugPreviewBackgroundColor, expected: NSColor.controlBackgroundColor, appearance: controller.debugPreviewEffectiveAppearance)
         }
 
         window.appearance = NSAppearance(named: .aqua)
         try waitUntil(
             description: "light appearance applied to main view backgrounds",
             debugState: {
-                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor))"
+                "main=\(String(describing: controller.debugMainBackgroundColor)) overlay=\(String(describing: controller.debugLoadingOverlayBackgroundColor)) preview=\(String(describing: controller.debugPreviewBackgroundColor))"
             }
         ) {
             colorsMatch(controller.debugMainBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.view.effectiveAppearance)
                 && colorsMatch(controller.debugLoadingOverlayBackgroundColor, expected: NSColor.windowBackgroundColor, alpha: 0.72, appearance: controller.view.effectiveAppearance)
+                && colorsMatch(controller.debugPreviewBackgroundColor, expected: NSColor.controlBackgroundColor, appearance: controller.debugPreviewEffectiveAppearance)
         }
     }
 
+    @MainActor
+    @Test
+    func previewWindowReappliesResolvedBackgroundColorsWhenAppearanceChanges() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "preview-appearance",
+            name: "Preview Appearance",
+            uuid: "PREVIEW-APPEARANCE-AAAA-BBBB",
+            teamName: "Preview Team",
+            teamIdentifier: "PREV1234",
+            bundleIdentifier: "com.example.preview.appearance"
+        )
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewAppearanceHost",
+            displayName: "Preview Appearance Host",
+            bundleIdentifier: "com.example.preview.appearance.host",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let controller = PreviewWindowController(inspection: inspection)
+        let window = try #require(controller.window)
+        window.makeKeyAndOrderFront(nil)
+
+        window.appearance = NSAppearance(named: .darkAqua)
+        try waitUntil(
+            description: "preview window dark background applied",
+            debugState: { "background=\(String(describing: controller.debugBackgroundColor))" }
+        ) {
+            colorsMatch(controller.debugBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.debugEffectiveAppearance)
+        }
+
+        window.appearance = NSAppearance(named: .aqua)
+        try waitUntil(
+            description: "preview window light background applied",
+            debugState: { "background=\(String(describing: controller.debugBackgroundColor))" }
+        ) {
+            colorsMatch(controller.debugBackgroundColor, expected: NSColor.windowBackgroundColor, appearance: controller.debugEffectiveAppearance)
+        }
+    }
+
+    @MainActor
+    @Test
+    func previewWindowShowsContentAreaAtInitialWindowSize() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "preview-layout",
+            name: "Preview Layout",
+            uuid: "PREVIEW-LAYOUT-AAAA-BBBB",
+            teamName: "Preview Team",
+            teamIdentifier: "PREV1234",
+            bundleIdentifier: "com.example.preview.layout"
+        )
+        let appURL = try TestFixtureFactory.writeApplicationBundle(
+            to: temporaryDirectory.url,
+            appName: "PreviewLayoutHost",
+            displayName: "Preview Layout Host",
+            bundleIdentifier: "com.example.preview.layout.host",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: appURL)
+        let controller = PreviewWindowController(inspection: inspection)
+        let window = try #require(controller.window)
+        window.makeKeyAndOrderFront(nil)
+
+        try waitUntil(
+            description: "preview window content area expanded on first display",
+            debugState: {
+                "content=\(controller.debugWindowContentRect) root=\(controller.debugRootViewFrame) tab=\(controller.debugTabViewFrame) selected=\(controller.debugSelectedTabContentFrame)"
+            }
+        ) {
+            controller.debugWindowContentRect.height > 600
+                && controller.debugRootViewFrame.height > 600
+                && controller.debugTabViewFrame.height > 300
+                && controller.debugSelectedTabContentFrame.height > 250
+        }
+    }
+
+    @MainActor
+    @Test
+    func tableHeaderDoubleClickDoesNotTriggerPreviewOpening() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let scanDirectory = try temporaryDirectory.makeDirectory(named: "Profiles")
+        let supportDirectory = try temporaryDirectory.makeDirectory(named: "Support")
+        let environment = [
+            "PROFILESMITH_SCAN_DIRECTORIES": scanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": supportDirectory.path,
+            "PROFILESMITH_UI_TEST": "1",
+        ]
+
+        let profileURL = try TestFixtureFactory.writeProfile(
+            to: scanDirectory,
+            fileName: "double-click-header",
+            name: "Double Click Header",
+            uuid: "DOUBLE-CLICK-HEADER-AAAA-BBBB",
+            teamName: "Header Team",
+            teamIdentifier: "HEAD1234",
+            bundleIdentifier: "com.example.header"
+        )
+
+        let context = try AppContext(bundle: .main, environment: environment)
+        defer { context.invalidate() }
+
+        let parser = MobileProvisionParser()
+        let record = try parser.parseProfile(
+            at: profileURL,
+            sourceLocation: ScanLocation(kind: .custom, url: scanDirectory, displayName: "Tests")
+        ).record
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        controller.debugApplySnapshot(
+            RepositorySnapshot(
+                profiles: [record],
+                metrics: ProfileMetrics(totalCount: 1, expiredCount: 0, expiringSoonCount: 0),
+                query: ProfileQuery(),
+                lastRefreshDate: Date()
+            )
+        )
+
+        controller.debugHandleTableDoubleAction(clickedRow: -1, clickedColumn: 0)
+        #expect(controller.debugDidOpenPreviewFromTableDoubleAction == false)
+    }
 }
 
 private func colorsMatch(_ actual: NSColor?, expected: NSColor, alpha: CGFloat = 1, appearance: NSAppearance) -> Bool {

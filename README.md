@@ -1,6 +1,6 @@
 # ProfileSmith
 
-ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索和维护 `.mobileprovision`、`.provisionprofile`。
+ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索、预览和维护 `.mobileprovision`、`.provisionprofile`，并在应用内预览 `.ipa`、`.xcarchive`、`.app`、`.appex`。
 
 ## 功能
 
@@ -8,6 +8,7 @@ ProfileSmith 是一个原生 macOS 描述文件管理器，用来索引、搜索
 - SQLite + GRDB 建索引，支持按名称、Bundle ID、Team、UUID、类型全文搜索
 - 详情面板展示概要、Entitlements、证书摘要和原始 plist 结构
 - 支持导入、导出、Finder 定位、移到废纸篓、彻底删除、文件名美化
+- 提供应用内预览页、独立预览窗口、双击与空格预览；不包含 Finder Quick Look 扩展
 - 已声明描述文件文档类型，可在 Finder 中通过“打开方式”使用 ProfileSmith 打开 `.mobileprovision` / `.provisionprofile`
 - 集成 Sparkle / GitHub Releases 更新检查，并可在偏好设置里配置检查策略
 
@@ -47,7 +48,7 @@ xcodebuild test \
 ## 使用说明
 
 1. 启动后左侧会自动显示已索引的描述文件。
-2. 选中单个条目后，右侧可以查看概要与原始 plist 结构。
+2. 选中单个条目后，右侧可以查看概要、原始 plist 结构与应用内预览。
 3. 拖入 `.mobileprovision` / `.provisionprofile` 会执行导入。
 4. 通过“偏好设置…”可以切换更新策略：手动检查、每天自动检查、启动时检查。
 5. 在 Finder 中右键描述文件，选择“打开方式 -> ProfileSmith”可以直接导入或定位到已有描述文件。
@@ -73,6 +74,8 @@ xcodebuild test \
 5. 生成并提交 `appcast.xml`
 
 ## 1.4.3 更新
+
+- 恢复应用内预览页、独立预览窗口和所有原有文件格式的解析支持，仅移除 Finder Quick Look 扩展。
 
 - 修复启动时左侧描述文件列表宽度为零、需要手动拖动分隔线才能显示的问题。
 - 为两侧面板分配有效初始宽度，并自动恢复旧版本留下的零宽度状态。

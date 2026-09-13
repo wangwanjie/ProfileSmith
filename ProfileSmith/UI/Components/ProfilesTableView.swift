@@ -18,12 +18,18 @@ final class TrailingBorderlessTableHeaderCell: NSTableHeaderCell {
 }
 
 final class ProfilesTableView: NSTableView {
+    var previewHandler: (() -> Void)?
     var copyHandler: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
         let modifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "c" {
             copy(self)
+            return
+        }
+
+        if event.keyCode == 49 {
+            previewHandler?()
             return
         }
 

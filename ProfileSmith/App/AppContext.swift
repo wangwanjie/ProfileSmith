@@ -3,6 +3,7 @@ import Foundation
 final class AppContext {
     let supportPaths: ProfileSupportPaths
     let parser: MobileProvisionParser
+    let archiveInspector: ArchiveInspector
     let database: ProfileDatabase
     let scanner: ProfileScanner
     let fileOperations: ProfileFileOperations
@@ -12,10 +13,11 @@ final class AppContext {
     init(bundle: Bundle = .main, environment: [String: String] = ProcessInfo.processInfo.environment) throws {
         supportPaths = try ProfileSupportPaths(bundle: bundle, environment: environment)
         parser = MobileProvisionParser()
+        archiveInspector = ArchiveInspector(parser: parser)
         database = try ProfileDatabase(databaseURL: supportPaths.databaseURL)
         scanner = ProfileScanner(paths: supportPaths, parser: parser, database: database)
         fileOperations = ProfileFileOperations(paths: supportPaths, parser: parser)
-        repository = ProfileRepository(database: database, scanner: scanner, parser: parser)
+        repository = ProfileRepository(database: database, scanner: scanner, parser: parser, archiveInspector: archiveInspector)
         updateManager = UpdateManager()
     }
 

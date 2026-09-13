@@ -11,12 +11,15 @@ final class MainViewController: NSViewController {
     private var selectedPaths: [String] = []
     private var currentProfiles: [ProfileRecord] = []
     private var currentParsedProfile: ParsedProfile?
+    private var currentInspection: PreviewInspection?
     private var currentInspectorRoot: InspectorNode?
+    private var previewWindowController: PreviewWindowController?
     private var pendingRevealPaths: [String] = []
     private var hasExpandedQueryForPendingReveal = false
     private var activeTableSortDescriptor: NSSortDescriptor?
     private var lastRequestedVisibleRow: Int?
     #if DEBUG
+    private(set) var didOpenPreviewFromTableDoubleAction = false
     private(set) var localizationTableReloadCount = 0
     #endif
 
@@ -24,7 +27,7 @@ final class MainViewController: NSViewController {
     private let sortPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let searchField = NSSearchField(frame: .zero)
     private let refreshButton = NSButton(title: L10n.mainRefresh, target: nil, action: nil)
-    private let importButton = NSButton(title: L10n.mainImport, target: nil, action: nil)
+    private let importButton = NSButton(title: L10n.mainImportPreview, target: nil, action: nil)
     private let progressIndicator = NSProgressIndicator()
     private let loadingOverlay = NSView()
     private let loadingPanel = NSVisualEffectView()
@@ -46,8 +49,9 @@ final class MainViewController: NSViewController {
     private let summaryScrollView = NSScrollView()
     private let detailOutlineView = NSOutlineView()
     private let detailOutlineScrollView = NSScrollView()
+    private let previewContentView = HTMLPreviewView()
     private let tabControl = NSSegmentedControl(
-        labels: [L10n.mainTabOverview, L10n.mainTabDetail],
+        labels: [L10n.mainTabOverview, L10n.mainTabDetail, L10n.mainTabPreview],
         trackingMode: .selectOne,
         target: nil,
         action: nil
@@ -65,6 +69,7 @@ final class MainViewController: NSViewController {
     }
 
     private lazy var actionButtons: [NSButton] = [
+        makeActionButton(title: L10n.mainActionPreview, action: #selector(previewSelectedItems(_:))),
         makeActionButton(title: L10n.mainActionFinder, action: #selector(showSelectedInFinder(_:))),
         makeActionButton(title: L10n.mainActionExport, action: #selector(exportSelectedProfile(_:))),
         makeActionButton(title: L10n.mainActionBeautifyFilename, action: #selector(renameSelectedProfile(_:))),
@@ -139,7 +144,7 @@ final class MainViewController: NSViewController {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.allowedFileTypes = ["mobileprovision", "provisionprofile"]
+        panel.allowedFileTypes = ["mobileprovision", "provisionprofile", "ipa", "xcarchive", "appex", "app"]
         guard panel.runModal() == .OK else { return }
         handleIncomingFiles(panel.urls)
     }
@@ -191,7 +196,7 @@ final class MainViewController: NSViewController {
         refreshButton.action = #selector(refreshProfiles(_:))
         refreshButton.setAccessibilityIdentifier("main.refreshButton")
         importButton.target = self
-        importButton.action = #selector(importProfiles(_:))
+        importButton.action = #selector(importOrPreview(_:))
         importButton.setAccessibilityIdentifier("main.importButton")
         filterPopUp.setAccessibilityIdentifier("main.filterPopUp")
         sortPopUp.setAccessibilityIdentifier("main.sortPopUp")
@@ -321,6 +326,10 @@ final class MainViewController: NSViewController {
         tableView.setAccessibilityIdentifier("main.profilesTable")
         tableView.delegate = self
         tableView.dataSource = self
+        tableView.doubleAction = #selector(handleTableDoubleAction(_:))
+        tableView.previewHandler = { [weak self] in
+            self?.previewSelectedItems(nil)
+        }
         tableView.copyHandler = { [weak self] in
             self?.copySelectedRowContents(nil)
         }
@@ -409,10 +418,14 @@ final class MainViewController: NSViewController {
         overviewItem.view = summaryScrollView
         let detailItem = NSTabViewItem(identifier: "detail")
         detailItem.view = detailOutlineScrollView
+        let previewItem = NSTabViewItem(identifier: "preview")
+        previewContentView.setAccessibilityIdentifier("main.previewView")
+        previewItem.view = previewContentView
 
         tabView.tabViewType = .noTabsNoBorder
         tabView.addTabViewItem(overviewItem)
         tabView.addTabViewItem(detailItem)
+        tabView.addTabViewItem(previewItem)
     }
 
     private func buildDetailContainer() {
@@ -516,13 +529,15 @@ final class MainViewController: NSViewController {
     private func applyLocalization() {
         searchField.placeholderString = L10n.mainSearchPlaceholder
         refreshButton.title = L10n.mainRefresh
-        importButton.title = L10n.mainImport
+        importButton.title = L10n.mainImportPreview
         loadingTitleLabel.stringValue = L10n.mainLoadingTitle
         loadingHintLabel.stringValue = L10n.mainLoadingHint
         tabControl.setLabel(L10n.mainTabOverview, forSegment: 0)
         tabControl.setLabel(L10n.mainTabDetail, forSegment: 1)
+        tabControl.setLabel(L10n.mainTabPreview, forSegment: 2)
 
         let actionTitles = [
+            L10n.mainActionPreview,
             L10n.mainActionFinder,
             L10n.mainActionExport,
             L10n.mainActionBeautifyFilename,
@@ -551,6 +566,7 @@ final class MainViewController: NSViewController {
             alpha: 0.72,
             appearance: view.effectiveAppearance
         )
+        previewContentView.refreshAppearanceColors()
     }
 
     private func rebuildFilterPopUp() {
@@ -753,11 +769,12 @@ final class MainViewController: NSViewController {
 
             do {
                 let parsedProfile = try self.context.repository.loadProfileDetails(for: record)
+                let inspection = self.context.archiveInspector.makeInspection(for: parsedProfile, sourceURL: URL(fileURLWithPath: record.path))
                 let rootNode = InspectorNodeBuilder.makeRootNode(from: parsedProfile.plist, certificates: parsedProfile.certificates)
 
                 DispatchQueue.main.async {
                     guard self.detailRequestID == requestID else { return }
-                    self.applyLoadedDetails(parsedProfile, rootNode: rootNode)
+                    self.applyLoadedDetails(parsedProfile, inspection: inspection, rootNode: rootNode)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -770,22 +787,29 @@ final class MainViewController: NSViewController {
 
     private func prepareDetailLoadingState(for record: ProfileRecord) {
         currentParsedProfile = nil
+        currentInspection = nil
         currentInspectorRoot = nil
 
         titleLabel.stringValue = record.displayName
         subtitleLabel.stringValue = record.path
         summaryTextView.string = L10n.mainDetailLoading
+        previewContentView.loadHTMLString(
+            makePreviewStatusHTML(title: L10n.mainPreviewGeneratingTitle, message: L10n.mainPreviewGeneratingMessage),
+            baseURL: nil
+        )
         typeBadge.configure(text: L10n.localizedProfileType(record.profileType), fillColor: NSColor.systemBlue.withAlphaComponent(0.16), textColor: .systemBlue)
         platformBadge.configure(text: L10n.localizedPlatform(record.profilePlatform), fillColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.15), textColor: .secondaryLabelColor)
         statusBadge.configure(text: record.statusText, fillColor: badgeColor(for: record).withAlphaComponent(0.16), textColor: badgeColor(for: record))
         stabilizeSplitViewLayout()
     }
 
-    private func applyLoadedDetails(_ parsedProfile: ParsedProfile, rootNode: InspectorNode) {
+    private func applyLoadedDetails(_ parsedProfile: ParsedProfile, inspection: PreviewInspection, rootNode: InspectorNode) {
         currentParsedProfile = parsedProfile
+        currentInspection = inspection
         currentInspectorRoot = rootNode
         detailOutlineView.reloadData()
         detailOutlineView.expandItem(nil, expandChildren: true)
+        previewContentView.loadHTMLString(inspection.quickLookHTML, baseURL: nil)
         summaryTextView.string = makeSummaryText(for: parsedProfile)
         titleLabel.stringValue = parsedProfile.record.displayName
         subtitleLabel.stringValue = parsedProfile.record.path
@@ -794,9 +818,14 @@ final class MainViewController: NSViewController {
 
     private func applyDetailLoadingError(_ error: Error) {
         currentParsedProfile = nil
+        currentInspection = nil
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
         summaryTextView.string = L10n.mainDetailParseFailed(error.localizedDescription)
+        previewContentView.loadHTMLString(
+            makePreviewStatusHTML(title: L10n.mainPreviewFailedTitle, message: error.localizedDescription),
+            baseURL: nil
+        )
         stabilizeSplitViewLayout()
     }
 
@@ -807,6 +836,10 @@ final class MainViewController: NSViewController {
         platformBadge.configure(text: nil, fillColor: .clear)
         statusBadge.configure(text: nil, fillColor: .clear)
         summaryTextView.string = L10n.mainEmptySummary
+        previewContentView.loadHTMLString(
+            makePreviewStatusHTML(title: L10n.appName, message: L10n.mainEmptyPreviewMessage),
+            baseURL: nil
+        )
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
         updateActionState()
@@ -825,10 +858,117 @@ final class MainViewController: NSViewController {
         summaryTextView.string = records.map { record in
             "\(record.displayName)\n  \(record.bundleIdentifier ?? record.appIDName ?? "-")\n  \(L10n.localizedProfileType(record.profileType)) | \(record.statusText)\n  \(record.path)"
         }.joined(separator: "\n\n")
+        previewContentView.loadHTMLString(
+            makePreviewStatusHTML(title: L10n.mainBulkPreviewTitle(records.count), message: L10n.mainBulkPreviewMessage),
+            baseURL: nil
+        )
         currentParsedProfile = nil
+        currentInspection = nil
         currentInspectorRoot = nil
         detailOutlineView.reloadData()
         stabilizeSplitViewLayout()
+    }
+
+    private func makePreviewStatusHTML(title: String, message: String) -> String {
+        let escapedTitle = escapePreviewHTML(title)
+        let escapedMessage = escapePreviewHTML(message).replacingOccurrences(of: "\n", with: "<br>")
+        return """
+        <!doctype html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light dark">
+        <style>
+        :root {
+            color-scheme: light dark;
+            --ink:#152132;
+            --muted:#5d7084;
+            --line:rgba(21,33,50,0.10);
+            --card:rgba(255,255,255,0.92);
+            --accent:#1e6fd9;
+            --tint:rgba(30,111,217,0.12);
+            --shadow:0 16px 36px rgba(36,54,84,0.10);
+            --bg-top:#f5f8fc;
+            --bg-bottom:#e9eff6;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --ink:#e8eef7;
+                --muted:#9badc2;
+                --line:rgba(194,208,228,0.14);
+                --card:rgba(18,25,35,0.94);
+                --accent:#7cb2ff;
+                --tint:rgba(124,178,255,0.16);
+                --shadow:0 18px 40px rgba(0,0,0,0.34);
+                --bg-top:#121923;
+                --bg-bottom:#0b1017;
+            }
+        }
+        * { box-sizing: border-box; }
+        html { background: var(--bg-bottom); }
+        body {
+            margin: 0;
+            padding: 18px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(circle at top left, rgba(98,146,220,0.18), transparent 30%),
+                linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        }
+        .card {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 22px 24px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: var(--card);
+            box-shadow: var(--shadow);
+        }
+        .badge {
+            display:inline-flex;
+            align-items:center;
+            margin-bottom:12px;
+            padding:8px 12px;
+            border-radius:999px;
+            background:var(--tint);
+            color:var(--accent);
+            font-size:12px;
+            font-weight:700;
+            letter-spacing:0.08em;
+            text-transform:uppercase;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+        p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        </style>
+        </head>
+        <body>
+            <section class="card">
+                <div class="badge">Preview</div>
+                <h1>\(escapedTitle)</h1>
+                <p>\(escapedMessage)</p>
+            </section>
+        </body>
+        </html>
+        """
+    }
+
+    private func escapePreviewHTML(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 
     private func makeSummaryText(for parsedProfile: ParsedProfile) -> String {
@@ -882,7 +1022,7 @@ final class MainViewController: NSViewController {
         let selectionCount = selectedRecords().count
         actionButtons.enumerated().forEach { index, button in
             switch index {
-            case 0, 3, 4:
+            case 0, 1, 4, 5:
                 button.isEnabled = selectionCount > 0
             default:
                 button.isEnabled = selectionCount == 1
@@ -1003,6 +1143,10 @@ final class MainViewController: NSViewController {
             guard currentProfiles.indices.contains(index) else { return nil }
             return currentProfiles[index]
         }
+    }
+
+    private func shouldOpenPreviewForTableDoubleAction(clickedRow: Int, clickedColumn: Int) -> Bool {
+        clickedRow >= 0 && clickedColumn >= 0 && currentProfiles.indices.contains(clickedRow)
     }
 
     private func effectiveProfileContextSelection() -> [ProfileRecord] {
@@ -1273,6 +1417,7 @@ final class MainViewController: NSViewController {
 
     private func handleIncomingFiles(_ urls: [URL], shouldShowImportAlert: Bool = true) {
         let profileURLs = urls.filter(ProfileScanner.isSupportedProfileFile(url:))
+        let previewURLs = urls.filter { !ProfileScanner.isSupportedProfileFile(url: $0) }
 
         do {
             var revealPaths: [String] = []
@@ -1309,16 +1454,27 @@ final class MainViewController: NSViewController {
                 }
             }
 
+            if let previewURL = previewURLs.first {
+                let inspection = try context.repository.inspectArchive(at: previewURL)
+                showPreviewWindow(for: inspection)
+            }
         } catch {
             NSApp.presentError(error)
         }
+    }
+
+    private func showPreviewWindow(for inspection: PreviewInspection) {
+        let windowController = PreviewWindowController(inspection: inspection)
+        previewWindowController = windowController
+        windowController.showWindow(self)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func refreshProfiles(_ sender: Any?) {
         context.repository.refresh(forceReindex: false)
     }
 
-    @objc private func importProfiles(_ sender: Any?) {
+    @objc private func importOrPreview(_ sender: Any?) {
         presentImportPanel(sender)
     }
 
@@ -1338,6 +1494,27 @@ final class MainViewController: NSViewController {
 
     @objc private func tabChanged(_ sender: Any?) {
         tabView.selectTabViewItem(at: tabControl.selectedSegment)
+    }
+
+    @objc private func previewSelectedItems(_ sender: Any?) {
+        let records = selectedRecords()
+        guard records.count == 1 else { return }
+        do {
+            let inspection = try context.repository.inspectArchive(at: URL(fileURLWithPath: records[0].path))
+            showPreviewWindow(for: inspection)
+        } catch {
+            NSApp.presentError(error)
+        }
+    }
+
+    @objc private func handleTableDoubleAction(_ sender: Any?) {
+        guard shouldOpenPreviewForTableDoubleAction(clickedRow: tableView.clickedRow, clickedColumn: tableView.clickedColumn) else {
+            return
+        }
+        #if DEBUG
+        didOpenPreviewFromTableDoubleAction = true
+        #endif
+        previewSelectedItems(sender)
     }
 
     @objc private func showSelectedInFinder(_ sender: Any?) {
@@ -1671,6 +1848,11 @@ extension MainViewController: NSMenuDelegate {
             let selection = effectiveProfileContextSelection()
             guard !selection.isEmpty else { return }
 
+            let previewItem = NSMenuItem(title: L10n.mainContextPreview, action: #selector(previewSelectedItems(_:)), keyEquivalent: "")
+            previewItem.target = self
+            previewItem.isEnabled = selection.count == 1
+            menu.addItem(previewItem)
+
             let finderItem = NSMenuItem(title: L10n.mainContextShowInFinder, action: #selector(showSelectedInFinder(_:)), keyEquivalent: "")
             finderItem.target = self
             menu.addItem(finderItem)
@@ -1728,15 +1910,19 @@ extension MainViewController {
     var debugTitleLabel: NSTextField { titleLabel }
     var debugSubtitleLabel: NSTextField { subtitleLabel }
     var debugSummaryTextView: NSTextView { summaryTextView }
+    var debugPreviewText: String { previewContentView.debugPlainText }
     var debugSearchField: NSSearchField { searchField }
     var debugStatusLabel: NSTextField { statusLabel }
     var debugProgressIndicator: NSProgressIndicator { progressIndicator }
     var debugMainBackgroundColor: NSColor? { view.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
     var debugLoadingOverlayBackgroundColor: NSColor? { loadingOverlay.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+    var debugPreviewBackgroundColor: NSColor? { previewContentView.debugBackgroundColor }
+    var debugPreviewEffectiveAppearance: NSAppearance { previewContentView.effectiveAppearance }
     var debugLocalizationTableReloadCount: Int { localizationTableReloadCount }
     var debugCurrentProfilePaths: [String] { currentProfiles.map(\.path) }
     var debugSelectedProfilePaths: [String] { selectedRecords().map(\.path) }
     var debugLastRequestedVisibleRow: Int? { lastRequestedVisibleRow }
+    var debugDidOpenPreviewFromTableDoubleAction: Bool { didOpenPreviewFromTableDoubleAction }
     var debugVisibleRowRange: NSRange {
         view.layoutSubtreeIfNeeded()
         splitView.layoutSubtreeIfNeeded()
@@ -1787,10 +1973,18 @@ extension MainViewController {
         detailRequestID &+= 1
         prepareDetailLoadingState(for: record)
         let parsedProfile = try context.repository.loadProfileDetails(for: record)
+        let inspection = context.archiveInspector.makeInspection(for: parsedProfile, sourceURL: URL(fileURLWithPath: record.path))
         let rootNode = InspectorNodeBuilder.makeRootNode(from: parsedProfile.plist, certificates: parsedProfile.certificates)
-        applyLoadedDetails(parsedProfile, rootNode: rootNode)
+        applyLoadedDetails(parsedProfile, inspection: inspection, rootNode: rootNode)
     }
 
+    func debugHandleTableDoubleAction(clickedRow: Int, clickedColumn: Int) {
+        didOpenPreviewFromTableDoubleAction = false
+        guard shouldOpenPreviewForTableDoubleAction(clickedRow: clickedRow, clickedColumn: clickedColumn) else {
+            return
+        }
+        didOpenPreviewFromTableDoubleAction = true
+    }
 }
 #endif
 
