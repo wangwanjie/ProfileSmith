@@ -214,6 +214,9 @@ final class MainViewController: NSViewController {
         buildTableArea()
         buildDetailArea()
 
+        // 两侧都必须有有效初始尺寸，否则分栏会将零宽度列表保留为折叠状态。
+        let initialTableWidth = clampedSplitPosition(for: splitView.bounds.width * 0.42)
+        tableContainer.frame = NSRect(x: 0, y: 0, width: initialTableWidth, height: splitView.bounds.height)
         tableContainer.addSubview(tableScrollView)
         tableContainer.translatesAutoresizingMaskIntoConstraints = false
         tableContainer.setAccessibilityIdentifier("main.tablePane")
@@ -223,7 +226,12 @@ final class MainViewController: NSViewController {
             make.edges.equalToSuperview()
         }
 
-        detailContainer.frame = NSRect(x: 0, y: 0, width: minimumDetailPaneWidth, height: view.bounds.height)
+        detailContainer.frame = NSRect(
+            x: initialTableWidth + splitView.dividerThickness,
+            y: 0,
+            width: splitView.bounds.width - initialTableWidth - splitView.dividerThickness,
+            height: splitView.bounds.height
+        )
         buildDetailContainer()
         detailContainer.translatesAutoresizingMaskIntoConstraints = false
         detailContainer.setAccessibilityIdentifier("main.detailPane")
@@ -941,13 +949,17 @@ final class MainViewController: NSViewController {
     }
 
     private func stabilizeSplitViewLayout() {
-        guard splitView.arrangedSubviews.count == 2 else { return }
+        guard !isApplyingPreferredSplitPosition,
+              splitView.arrangedSubviews.count == 2,
+              splitView.bounds.width > splitView.dividerThickness
+        else { return }
 
         if preferredSplitPosition == nil {
             let currentWidth = tableContainer.frame.width
-            if currentWidth > 0 {
-                preferredSplitPosition = currentWidth
-            }
+            // 保留有效恢复位置；旧版本保存的零宽度需要回退到默认比例。
+            preferredSplitPosition = currentWidth >= minimumTablePaneWidth
+                ? currentWidth
+                : clampedSplitPosition(for: splitView.bounds.width * 0.42)
         }
 
         guard let preferredSplitPosition else { return }

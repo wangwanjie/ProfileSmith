@@ -167,6 +167,7 @@ struct MainViewControllerTests {
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
 
         let initialWidth = controller.debugSplitView.arrangedSubviews.first?.frame.width ?? 0
+        #expect(initialWidth >= controller.debugNameColumnMinWidth)
 
         try controller.debugLoadDetailsSynchronously(for: shortRecord)
         #expect(controller.debugSummaryTextView.string.contains("Short Name"))
@@ -178,6 +179,52 @@ struct MainViewControllerTests {
 
         #expect(abs(initialWidth - shortWidth) < 1)
         #expect(abs(shortWidth - longWidth) < 1)
+    }
+
+    @MainActor
+    @Test
+    func mainWindowShowsBothPanesAfterPreloadingAndResizing() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+        let context = try AppContext(environment: [
+            "PROFILESMITH_SCAN_DIRECTORIES": temporaryDirectory.url.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": temporaryDirectory.url.appendingPathComponent("Support").path,
+            "PROFILESMITH_UI_TEST": "1",
+        ])
+        defer { context.invalidate() }
+
+        let controller = MainViewController(context: context)
+        controller.loadViewIfNeeded()
+        let splitView = controller.debugSplitView
+        splitView.autosaveName = nil
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentViewController = controller
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+
+        for width: CGFloat in [1320, 1100, 1560, 1320] {
+            window.setContentSize(NSSize(width: width, height: 840))
+            controller.view.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            #expect(splitView.arrangedSubviews[0].frame.width >= controller.debugNameColumnMinWidth)
+            #expect(splitView.arrangedSubviews[1].frame.width >= 540)
+            #expect(controller.debugTableView.visibleRect.width > 0)
+        }
+
+        // 模拟旧版本恢复了折叠状态，再次布局时应自动恢复列表。
+        splitView.delegate = nil
+        splitView.setPosition(0, ofDividerAt: 0)
+        splitView.delegate = controller
+        controller.viewDidLayout()
+        controller.view.layoutSubtreeIfNeeded()
+        #expect(splitView.arrangedSubviews[0].frame.width >= controller.debugNameColumnMinWidth)
+        #expect(splitView.arrangedSubviews[1].frame.width >= 540)
     }
 
     @MainActor
