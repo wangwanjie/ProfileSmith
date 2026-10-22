@@ -15,6 +15,11 @@ struct ReleaseVersion: Comparable {
         self.components = Self.parse(rawValue)
     }
 
+    /// 相等性与排序保持一致：按数字分量比较，"1.5" 与 "v1.5.0" 视为同一版本。
+    static func == (lhs: ReleaseVersion, rhs: ReleaseVersion) -> Bool {
+        !(lhs < rhs) && !(rhs < lhs)
+    }
+
     static func < (lhs: ReleaseVersion, rhs: ReleaseVersion) -> Bool {
         let count = max(lhs.components.count, rhs.components.count)
         for index in 0..<count {

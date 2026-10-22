@@ -222,3 +222,13 @@
 "preview.html.empty.entitlements" = "No entitlements available.";
 "preview.html.empty.info_plist" = "No Info.plist data available.";
 "preview.html.empty.certificates" = "No certificate data available.";
+
+"display.profile_type.distribution_developer_id" = "Distribution (Developer ID)";
+"menu.clean_expired" = "Clean Up Expired Profiles…";
+"main.clean_expired.title" = "Move %d expired profiles to the Trash?";
+"main.clean_expired.empty.title" = "No Expired Profiles";
+"main.clean_expired.empty.body" = "All indexed profiles are still valid.";
+"main.clean_expired.completed" = "Moved %d expired profiles to the Trash.";
+"main.context.copy_uuid" = "Copy UUID";
+"main.context.copy_bundle_id" = "Copy Bundle ID";
+"main.status.scan_failed" = " Skipped %d unreadable files.";

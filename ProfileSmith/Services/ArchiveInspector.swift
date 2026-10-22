@@ -75,11 +75,34 @@ final class ArchiveInspector {
             .appendingPathComponent("ProfileSmith-Preview-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
 
-        try runProcess(launchPath: "/usr/bin/ditto", arguments: ["-x", "-k", url.path, temporaryDirectory.path])
+        // 只解压预览需要的 Info.plist 和 embedded.mobileprovision，避免为了读两个小文件把整个（可能上 GB 的）IPA 解开。
+        // unzip 的通配符 * 可以跨越目录层级；某个模式未匹配到文件（如没有内嵌描述文件）时退出码为 11，同样视为成功。
+        do {
+            try runProcess(
+                launchPath: "/usr/bin/unzip",
+                arguments: [
+                    "-qq", "-o", url.path,
+                    "Payload/*.app/Info.plist",
+                    "Payload/*.app/embedded.mobileprovision",
+                    "-d", temporaryDirectory.path,
+                ],
+                acceptedExitCodes: [0, 11]
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+            throw ParserError.unreadableData(url)
+        }
 
         let payloadDirectory = temporaryDirectory.appendingPathComponent("Payload", isDirectory: true)
-        let applicationURL = try findApplicationBundle(in: payloadDirectory)
-        let inspection = try inspectApplicationBundle(url: applicationURL)
+        let inspection: PreviewInspection
+        do {
+            let applicationURL = try findApplicationBundle(in: payloadDirectory)
+            inspection = try inspectApplicationBundle(url: applicationURL)
+        } catch {
+            // 非法 IPA 解析失败时也要清理临时目录，否则会在 /tmp 中残留。
+            try? FileManager.default.removeItem(at: temporaryDirectory)
+            throw error
+        }
         return PreviewInspection(
             sourceURL: url,
             title: inspection.title,
@@ -145,13 +168,16 @@ final class ArchiveInspector {
         throw ParserError.unsupportedFile(directory)
     }
 
-    private func runProcess(launchPath: String, arguments: [String]) throws {
+    private func runProcess(launchPath: String, arguments: [String], acceptedExitCodes: Set<Int32> = [0]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = arguments
+        // 丢弃子进程输出，避免输出过多时写满管道缓冲区。
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        guard acceptedExitCodes.contains(process.terminationStatus) else {
             throw ParserError.unreadableData(URL(fileURLWithPath: arguments.last ?? launchPath))
         }
     }
@@ -175,11 +201,11 @@ final class ArchiveInspector {
         ]
 
         let entitlementRows = entitlements.keys.sorted().map { key in
-            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(String(describing: entitlements[key] ?? "")))</code></td></tr>"
+            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(Formatters.plistValueString(entitlements[key] ?? "")))</code></td></tr>"
         }.joined()
 
         let infoRows = (infoPlist ?? [:]).keys.sorted().prefix(20).map { key in
-            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(String(describing: infoPlist?[key] ?? "")))</code></td></tr>"
+            "<tr><th>\(escapeHTML(key))</th><td><code>\(escapeHTML(Formatters.plistValueString(infoPlist?[key] ?? "")))</code></td></tr>"
         }.joined()
 
         let certificateRows = (profile?.certificates ?? []).map { certificate in

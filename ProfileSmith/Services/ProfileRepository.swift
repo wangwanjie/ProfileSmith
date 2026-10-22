@@ -14,6 +14,8 @@ struct RepositorySnapshot: Equatable {
 final class ProfileRepository {
     @Published private(set) var snapshot: RepositorySnapshot = .empty
     @Published private(set) var isRefreshing = false
+    /// 最近一次扫描中解析失败的文件路径，供界面提示用户。
+    @Published private(set) var lastScanFailedPaths: [String] = []
 
     private let database: ProfileDatabase
     private let scanner: ProfileScanner
@@ -24,6 +26,7 @@ final class ProfileRepository {
     private var query = ProfileQuery()
     private var pendingRefreshRequested = false
     private var pendingRefreshForceReindex = false
+    private var directoryMonitor: ProfileDirectoryMonitor?
 
     init(database: ProfileDatabase, scanner: ProfileScanner, parser: MobileProvisionParser, archiveInspector: ArchiveInspector) {
         self.database = database
@@ -37,8 +40,25 @@ final class ProfileRepository {
         refresh(forceReindex: false)
     }
 
+    /// 监听描述文件目录，Xcode 下载或删除描述文件后自动增量刷新，无需手动点击“刷新”。
+    func startMonitoring(directories: [URL]) {
+        guard directoryMonitor == nil else { return }
+        let monitor = ProfileDirectoryMonitor(directories: directories) { [weak self] in
+            self?.refresh(forceReindex: false)
+        }
+        monitor.start()
+        directoryMonitor = monitor
+    }
+
     func invalidate() {
+        directoryMonitor?.stop()
+        directoryMonitor = nil
         workQueue.sync {}
+    }
+
+    /// 当前所有已过期的描述文件（忽略界面上的搜索与筛选条件），用于“清理过期描述文件”。
+    func fetchExpiredProfiles() throws -> [ProfileRecord] {
+        try database.fetchProfiles(query: ProfileQuery(searchText: "", filter: .expired, sort: .nameAscending))
     }
 
     func setSearchText(_ searchText: String) {
@@ -66,20 +86,23 @@ final class ProfileRepository {
             return
         }
         isRefreshing = true
+        // 在主线程捕获查询条件再交给后台队列，避免后台读取 query 时与主线程修改产生数据竞争。
+        let query = self.query
 
         workQueue.async { [weak self] in
             guard let self else { return }
 
             do {
-                _ = try self.scanner.scan(forceReindex: forceReindex)
-                let profiles = try self.database.fetchProfiles(query: self.query)
+                let scanResult = try self.scanner.scan(forceReindex: forceReindex)
+                let profiles = try self.database.fetchProfiles(query: query)
                 let metrics = try self.database.fetchMetrics()
                 let date = Date()
                 DispatchQueue.main.async {
+                    self.lastScanFailedPaths = scanResult.failedPaths
                     self.snapshot = RepositorySnapshot(
                         profiles: profiles,
                         metrics: metrics,
-                        query: self.query,
+                        query: query,
                         lastRefreshDate: date
                     )
                     self.isRefreshing = false
@@ -109,17 +132,18 @@ final class ProfileRepository {
     }
 
     private func reloadFromDatabase(lastRefreshDate: Date?) {
+        let query = self.query
         workQueue.async { [weak self] in
             guard let self else { return }
 
             do {
-                let profiles = try self.database.fetchProfiles(query: self.query)
+                let profiles = try self.database.fetchProfiles(query: query)
                 let metrics = try self.database.fetchMetrics()
                 DispatchQueue.main.async {
                     self.snapshot = RepositorySnapshot(
                         profiles: profiles,
                         metrics: metrics,
-                        query: self.query,
+                        query: query,
                         lastRefreshDate: lastRefreshDate
                     )
                 }

@@ -8,6 +8,12 @@ struct AppSettingsTests {
     @MainActor
     @Test
     func updateCheckStrategyPersistsToUserDefaults() {
+        // AppSettings 初始化会把语言与外观应用到全局单例，用例结束后恢复，避免影响其他用例。
+        let originalLanguage = AppLocalization.shared.language
+        defer {
+            AppLocalization.shared.setLanguage(originalLanguage)
+            AppearanceManager.shared.apply(.system)
+        }
         let suiteName = "ProfileSmithTests.AppSettings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -29,6 +35,11 @@ struct AppSettingsTests {
     @MainActor
     @Test
     func languageAndAppearancePersistToUserDefaults() {
+        let originalLanguage = AppLocalization.shared.language
+        defer {
+            AppLocalization.shared.setLanguage(originalLanguage)
+            AppearanceManager.shared.apply(.system)
+        }
         let suiteName = "ProfileSmithTests.AppSettings.RuntimePreferences.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer {
@@ -36,7 +47,8 @@ struct AppSettingsTests {
         }
 
         let settings = AppSettings(defaults: defaults)
-        #expect(settings.appLanguage == .simplifiedChinese)
+        // 未设置过语言时跟随系统首选语言。
+        #expect(settings.appLanguage == AppLanguage.preferred(from: Locale.preferredLanguages))
         #expect(settings.appAppearance == .system)
 
         settings.appLanguage = .traditionalChinese
@@ -47,7 +59,7 @@ struct AppSettingsTests {
         #expect(reloadedSettings.appAppearance == .dark)
 
         settings.resetToDefaults()
-        #expect(settings.appLanguage == .simplifiedChinese)
+        #expect(settings.appLanguage == AppLanguage.preferred(from: Locale.preferredLanguages))
         #expect(settings.appAppearance == .system)
     }
 
@@ -56,9 +68,10 @@ struct AppSettingsTests {
     func initializingSettingsAppliesPersistedRuntimePreferences() {
         let suiteName = "ProfileSmithTests.AppSettings.ApplyRuntimePreferences.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
+        let originalLanguage = AppLocalization.shared.language
         defer {
             defaults.removePersistentDomain(forName: suiteName)
-            AppLocalization.shared.setLanguage(.simplifiedChinese)
+            AppLocalization.shared.setLanguage(originalLanguage)
             AppearanceManager.shared.apply(.system)
         }
 

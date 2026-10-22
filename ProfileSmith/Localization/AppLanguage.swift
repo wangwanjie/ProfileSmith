@@ -34,6 +34,11 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         return nil
     }
 
+    /// 首次启动（用户未手动选择语言）时跟随系统首选语言，不支持的语言回退为英文。
+    static var systemPreferred: AppLanguage {
+        preferred(from: Locale.preferredLanguages)
+    }
+
     static func preferred(from identifiers: [String]) -> AppLanguage {
         for identifier in identifiers {
             if let language = resolve(identifier) {

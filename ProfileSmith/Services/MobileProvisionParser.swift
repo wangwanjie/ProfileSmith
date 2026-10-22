@@ -89,7 +89,10 @@ final class MobileProvisionParser {
         let certificatesData = plist["DeveloperCertificates"] as? [Data] ?? []
         let certificateSummaries = certificatesData.compactMap(Self.parseCertificate(_:))
 
-        let applicationIdentifier = (plist["Entitlements"] as? [String: Any])?["application-identifier"] as? String
+        // iOS 描述文件使用 application-identifier，Mac 描述文件使用 com.apple.application-identifier。
+        let entitlements = plist["Entitlements"] as? [String: Any]
+        let applicationIdentifier = (entitlements?["application-identifier"] as? String)
+            ?? (entitlements?["com.apple.application-identifier"] as? String)
         let applicationIdentifierPrefix = (plist["ApplicationIdentifierPrefix"] as? [String])?.first
         let bundleIdentifier = Self.bundleIdentifier(
             applicationIdentifier: applicationIdentifier,
@@ -165,7 +168,11 @@ final class MobileProvisionParser {
         let isEnterprise = plist["ProvisionsAllDevices"] as? Bool ?? false
 
         if fileExtension == "provisionprofile" {
-            return hasDevices ? "Development" : "Distribution (App Store)"
+            if hasDevices {
+                return "Development"
+            }
+            // Mac 的 Developer ID 描述文件不绑定设备，而是通过 ProvisionsAllDevices 允许所有 Mac 运行。
+            return isEnterprise ? "Distribution (Developer ID)" : "Distribution (App Store)"
         }
         if hasDevices {
             return getTaskAllow ? "Development" : "Distribution (Ad Hoc)"

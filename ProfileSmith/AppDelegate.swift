@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 单元测试以本应用作为宿主运行，此时不应扫描用户真实的描述文件目录、创建菜单栏图标或检查更新。
+        guard !isHostingUnitTests else { return }
+
         do {
             NSApp.setActivationPolicy(.regular)
             let context = try AppContext()
@@ -68,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             context.repository.start()
             if !isUITesting {
+                context.repository.startMonitoring(directories: context.supportPaths.scanLocations.map(\.url))
                 context.updateManager.configure()
                 context.updateManager.scheduleBackgroundUpdateCheck()
             }
@@ -131,6 +135,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainWindowController?.contentController.presentImportPanel(sender)
     }
 
+    @objc private func cleanUpExpiredProfiles(_ sender: Any?) {
+        openMainWindow(sender)
+        mainWindowController?.contentController.presentExpiredProfileCleanup(sender)
+    }
+
     @objc private func checkForUpdates(_ sender: Any?) {
         context?.updateManager.checkForUpdates()
     }
@@ -145,6 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var isUITesting: Bool {
         environment["PROFILESMITH_UI_TEST"] == "1"
+    }
+
+    private var isHostingUnitTests: Bool {
+        environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil
     }
 
     private func presentInitialMainWindowIfNeeded() {
@@ -224,6 +237,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshItem.keyEquivalentModifierMask = [.command]
         refreshItem.target = self
         fileMenu.addItem(refreshItem)
+        fileMenu.addItem(NSMenuItem.separator())
+        let cleanExpiredItem = NSMenuItem(title: L10n.menuCleanExpired, action: #selector(cleanUpExpiredProfiles(_:)), keyEquivalent: "")
+        cleanExpiredItem.target = self
+        fileMenu.addItem(cleanExpiredItem)
         fileMenu.addItem(NSMenuItem.separator())
         fileMenu.addItem(NSMenuItem(title: L10n.menuCloseWindow, action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         fileItem.submenu = fileMenu

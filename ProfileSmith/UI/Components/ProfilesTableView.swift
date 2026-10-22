@@ -20,6 +20,7 @@ final class TrailingBorderlessTableHeaderCell: NSTableHeaderCell {
 final class ProfilesTableView: NSTableView {
     var previewHandler: (() -> Void)?
     var copyHandler: (() -> Void)?
+    var deleteHandler: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
         let modifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -28,9 +29,18 @@ final class ProfilesTableView: NSTableView {
             return
         }
 
+        // 空格：快速预览
         if event.keyCode == 49 {
             previewHandler?()
             return
+        }
+
+        // Delete（51）或 ⌘Delete：移到废纸篓（处理函数内部会弹窗确认）
+        if event.keyCode == 51 || event.keyCode == 117 {
+            if !selectedRowIndexes.isEmpty {
+                deleteHandler?()
+                return
+            }
         }
 
         super.keyDown(with: event)

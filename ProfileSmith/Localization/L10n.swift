@@ -22,6 +22,7 @@ enum L10n {
     static var menuFile: String { tr("menu.file") }
     static var menuImportProfiles: String { tr("menu.import_profiles") }
     static var menuRefresh: String { tr("menu.refresh") }
+    static var menuCleanExpired: String { tr("menu.clean_expired") }
     static var menuCloseWindow: String { tr("menu.close_window") }
     static var menuEdit: String { tr("menu.edit") }
     static var menuUndo: String { tr("menu.undo") }
@@ -124,6 +125,13 @@ enum L10n {
     static var mainContextExportCertificate: String { tr("main.context.export_certificate") }
     static var mainContextCopySHA1: String { tr("main.context.copy_sha1") }
     static var mainContextCopySHA256: String { tr("main.context.copy_sha256") }
+    static var mainContextCopyUUID: String { tr("main.context.copy_uuid") }
+    static var mainContextCopyBundleID: String { tr("main.context.copy_bundle_id") }
+    static func mainCleanExpiredTitle(_ count: Int) -> String { tr("main.clean_expired.title", count) }
+    static var mainCleanExpiredEmptyTitle: String { tr("main.clean_expired.empty.title") }
+    static var mainCleanExpiredEmptyBody: String { tr("main.clean_expired.empty.body") }
+    static func mainCleanExpiredCompleted(_ count: Int) -> String { tr("main.clean_expired.completed", count) }
+    static func mainStatusScanFailed(_ count: Int) -> String { tr("main.status.scan_failed", count) }
     static var mainSummaryBasicInfo: String { tr("main.summary.basic_info") }
     static var mainSummaryName: String { tr("main.summary.name") }
     static var mainSummaryUUID: String { tr("main.summary.uuid") }
@@ -174,6 +182,7 @@ enum L10n {
     static var displayProfileTypeDevelopment: String { tr("display.profile_type.development") }
     static var displayProfileTypeDistributionAppStore: String { tr("display.profile_type.distribution_app_store") }
     static var displayProfileTypeDistributionAdHoc: String { tr("display.profile_type.distribution_adhoc") }
+    static var displayProfileTypeDistributionDeveloperID: String { tr("display.profile_type.distribution_developer_id") }
     static var displayProfileTypeEnterprise: String { tr("display.profile_type.enterprise") }
     static var displayPlatformIOS: String { tr("display.platform.ios") }
     static var displayPlatformMac: String { tr("display.platform.mac") }
@@ -263,6 +272,8 @@ enum L10n {
             return displayProfileTypeDistributionAppStore
         case "Distribution (Ad Hoc)":
             return displayProfileTypeDistributionAdHoc
+        case "Distribution (Developer ID)":
+            return displayProfileTypeDistributionDeveloperID
         case "Enterprise":
             return displayProfileTypeEnterprise
         default:

@@ -86,7 +86,7 @@ final class ProfileDatabase {
             let ftsQuery = makeFTSQuery(from: query.searchText)
             if !ftsQuery.isEmpty {
                 do {
-                    return try ProfileRecord.fetchAll(
+                    let ftsResults = try ProfileRecord.fetchAll(
                         db,
                         sql: """
                         \(selectClause)
@@ -97,8 +97,12 @@ final class ProfileDatabase {
                         """,
                         arguments: [ftsQuery] + predicate.arguments
                     )
+                    // FTS 只支持词首前缀匹配（如 "Smith" 搜不到 "ProfileSmith"），无结果时继续用子串匹配兜底。
+                    if !ftsResults.isEmpty {
+                        return ftsResults
+                    }
                 } catch {
-                    // Fall through to LIKE matching if FTS syntax cannot represent the user query.
+                    // FTS 语法无法表达用户输入（如包含 "." "-"）时，回退到 LIKE 子串匹配。
                 }
             }
 
@@ -106,11 +110,11 @@ final class ProfileDatabase {
                 db,
                 sql: """
                 \(selectClause)
-                WHERE LOWER(searchText) LIKE ?
+                WHERE LOWER(searchText) LIKE ? ESCAPE '\\'
                 \(predicate.andClause)
                 \(orderBy)
                 """,
-                arguments: ["%\(query.searchText.lowercased())%"] + predicate.arguments
+                arguments: [makeLikePattern(from: query.searchText)] + predicate.arguments
             )
         }
     }
@@ -185,6 +189,13 @@ final class ProfileDatabase {
                 table.column("searchText")
                 table.tokenizer = .unicode61()
             }
+        }
+
+        // 1.5.0 修正了 Mac Developer ID 描述文件的类型识别与 Mac 描述文件的 Bundle ID 解析。索引只是磁盘文件的缓存，
+        // 清空后下一次扫描会全量重建，确保旧版本写入的错误类型被纠正。
+        migrator.registerMigration("reindexForDeveloperIDProfileType") { db in
+            try db.execute(sql: "DELETE FROM profile_search")
+            try db.execute(sql: "DELETE FROM profiles")
         }
 
         return migrator
@@ -292,6 +303,17 @@ final class ProfileDatabase {
         END
         """
         return (isExpired, daysUntilExpiration)
+    }
+
+    /// 转义 LIKE 通配符，避免用户输入的 "%"、"_" 被当成通配符。
+    private func makeLikePattern(from searchText: String) -> String {
+        let escaped = searchText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "%", with: "\\%")
+            .replacingOccurrences(of: "_", with: "\\_")
+        return "%\(escaped)%"
     }
 
     private func makeFTSQuery(from searchText: String) -> String {

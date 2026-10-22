@@ -3,6 +3,8 @@ import Foundation
 struct ScanResult {
     var changedCount: Int
     var removedCount: Int
+    /// 解析失败而被跳过的文件路径；单个文件损坏不应中断整次扫描。
+    var failedPaths: [String] = []
 }
 
 final class ProfileScanner {
@@ -22,6 +24,7 @@ final class ProfileScanner {
         let fileURLsByPath = discoveredProfileFiles()
 
         var changedRecords: [ProfileRecord] = []
+        var failedPaths: [String] = []
         var removedPaths = Set(existingStates.keys)
 
         for (path, payload) in fileURLsByPath {
@@ -35,13 +38,26 @@ final class ProfileScanner {
             }
 
             guard shouldReparse else { continue }
-            let parsedProfile = try parser.parseProfile(at: payload.url, sourceLocation: payload.location)
-            changedRecords.append(parsedProfile.record)
+            do {
+                let parsedProfile = try parser.parseProfile(at: payload.url, sourceLocation: payload.location)
+                changedRecords.append(parsedProfile.record)
+            } catch {
+                // 损坏或无法读取的文件跳过即可；若之前已索引过，则从索引中移除旧数据，避免展示过期内容。
+                failedPaths.append(path)
+                if existingStates[path] != nil {
+                    removedPaths.insert(path)
+                }
+                NSLog("ProfileSmith: failed to parse %@: %@", path, error.localizedDescription)
+            }
         }
 
         try database.save(records: changedRecords, removingPaths: Array(removedPaths))
 
-        return ScanResult(changedCount: changedRecords.count, removedCount: removedPaths.count)
+        return ScanResult(
+            changedCount: changedRecords.count,
+            removedCount: removedPaths.count,
+            failedPaths: failedPaths.sorted()
+        )
     }
 
     private func discoveredProfileFiles() -> [String: (url: URL, location: ScanLocation, fileSize: Int64, modificationTime: TimeInterval)] {

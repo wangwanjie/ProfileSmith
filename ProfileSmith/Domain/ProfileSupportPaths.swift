@@ -50,15 +50,17 @@ struct ProfileSupportPaths {
             ]
         }
 
-        renameBackupDirectory = homeDirectory
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("MobileDevice", isDirectory: true)
-            .appendingPathComponent("Provisioning Profiles Rename Backup", isDirectory: true)
-
         let applicationSupportDirectory: URL
         if let override = environment["PROFILESMITH_SUPPORT_DIRECTORY"], !override.isEmpty {
             applicationSupportDirectory = URL(fileURLWithPath: override, isDirectory: true)
+            // 自定义支持目录（测试或调试）时，备份也放在该目录下，避免污染用户真实的 MobileDevice 目录。
+            renameBackupDirectory = applicationSupportDirectory
+                .appendingPathComponent("Rename Backup", isDirectory: true)
         } else {
+            renameBackupDirectory = homeDirectory
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("MobileDevice", isDirectory: true)
+                .appendingPathComponent("Provisioning Profiles Rename Backup", isDirectory: true)
             applicationSupportDirectory = homeDirectory
                 .appendingPathComponent("Library", isDirectory: true)
                 .appendingPathComponent("Application Support", isDirectory: true)
@@ -74,10 +76,9 @@ struct ProfileSupportPaths {
         scanLocations.first(where: { $0.kind == .mobileDevice }) ?? scanLocations[0]
     }
 
+    /// 启动时只创建应用自身的支持目录；重命名备份目录等到真正需要备份时再创建。
     private func ensureDirectoriesExist() throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: renameBackupDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: applicationSupportDirectory, withIntermediateDirectories: true)
     }
 }
 

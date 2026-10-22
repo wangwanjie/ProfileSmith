@@ -100,5 +100,139 @@ struct ArchiveAndFileOperationsTests {
         let renamedURL = try fileOperations.beautifyFilename(for: originalRecord)
         #expect(renamedURL.lastPathComponent == "Shared Two-2.mobileprovision")
         #expect(FileManager.default.fileExists(atPath: renamedURL.path))
+
+        // 使用自定义支持目录时，重命名备份必须落在该目录下，不能写进用户真实的 ~/Library/MobileDevice。
+        #expect(paths.renameBackupDirectory.path.hasPrefix(supportDirectory.path))
+        let backups = try FileManager.default.contentsOfDirectory(atPath: paths.renameBackupDirectory.path)
+        #expect(backups.count == 1)
+        #expect(backups.first?.hasPrefix("Shared Two-") == true)
+    }
+
+    @Test
+    func importCreatesMissingInstallDirectoryAndSkipsIdenticalFiles() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let missingScanDirectory = temporaryDirectory.url.appendingPathComponent("Not Yet Created", isDirectory: true)
+        let paths = try ProfileSupportPaths(bundle: .main, environment: [
+            "PROFILESMITH_SCAN_DIRECTORIES": missingScanDirectory.path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": try temporaryDirectory.makeDirectory(named: "Support").path,
+        ])
+        let fileOperations = ProfileFileOperations(paths: paths, parser: MobileProvisionParser())
+        let sourceURL = try TestFixtureFactory.writeProfile(
+            to: try temporaryDirectory.makeDirectory(named: "Imports"),
+            fileName: "incoming",
+            name: "Incoming",
+            uuid: "IMPORT-AAAA-BBBB",
+            teamName: "Import Team",
+            teamIdentifier: "IMPT1234",
+            bundleIdentifier: "com.example.incoming"
+        )
+
+        let firstResult = try fileOperations.importProfiles(from: [sourceURL])
+        #expect(firstResult.installedURLs.map(\.lastPathComponent) == ["IMPORT-AAAA-BBBB.mobileprovision"])
+        #expect(FileManager.default.fileExists(atPath: missingScanDirectory.path))
+
+        // 重复导入同一份内容应跳过，而不是生成 -2 副本。
+        let secondResult = try fileOperations.importProfiles(from: [sourceURL])
+        #expect(secondResult.installedURLs.isEmpty)
+        #expect(secondResult.skippedURLs.map(\.lastPathComponent) == ["IMPORT-AAAA-BBBB.mobileprovision"])
+
+        // 不支持的文件类型直接忽略。
+        let ignored = try fileOperations.importProfiles(from: [URL(fileURLWithPath: "/tmp/not-a-profile.txt")])
+        #expect(ignored.installedURLs.isEmpty && ignored.skippedURLs.isEmpty)
+    }
+
+    @Test
+    func exportingProfileOntoItselfKeepsTheSourceFile() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let paths = try ProfileSupportPaths(bundle: .main, environment: [
+            "PROFILESMITH_SCAN_DIRECTORIES": try temporaryDirectory.makeDirectory(named: "Scan").path,
+            "PROFILESMITH_SUPPORT_DIRECTORY": try temporaryDirectory.makeDirectory(named: "Support").path,
+        ])
+        let fileOperations = ProfileFileOperations(paths: paths, parser: MobileProvisionParser())
+        let sourceURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "self-export",
+            name: "Self Export",
+            uuid: "EXPORT-AAAA-BBBB",
+            teamName: "Export Team",
+            teamIdentifier: "EXPT1234",
+            bundleIdentifier: "com.example.export"
+        )
+        let originalData = try Data(contentsOf: sourceURL)
+
+        try fileOperations.exportProfile(from: sourceURL, to: sourceURL)
+        #expect(try Data(contentsOf: sourceURL) == originalData)
+
+        let exportURL = temporaryDirectory.url.appendingPathComponent("exported.mobileprovision")
+        try Data("old".utf8).write(to: exportURL)
+        try fileOperations.exportProfile(from: sourceURL, to: exportURL)
+        #expect(try Data(contentsOf: exportURL) == originalData)
+    }
+
+    @Test
+    func archiveInspectorHandlesIPAWithoutEmbeddedProfileAndRejectsInvalidArchives() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let ipaURL = try TestFixtureFactory.writeIPA(
+            to: temporaryDirectory.url,
+            name: "NoProfile",
+            appDisplayName: "No Profile App",
+            bundleIdentifier: "com.example.noprofile",
+            embeddedProfileURL: nil
+        )
+        let inspector = ArchiveInspector(parser: MobileProvisionParser())
+
+        let inspection = try inspector.inspect(url: ipaURL)
+        #expect(inspection.title == "No Profile App")
+        #expect(inspection.parsedProfile == nil)
+        #expect(inspection.infoPlist?["CFBundleIdentifier"] as? String == "com.example.noprofile")
+
+        let bogusIPA = temporaryDirectory.url.appendingPathComponent("bogus.ipa")
+        try Data("not a zip".utf8).write(to: bogusIPA)
+        #expect(throws: ParserError.self) {
+            _ = try inspector.inspect(url: bogusIPA)
+        }
+
+        #expect(throws: ParserError.self) {
+            _ = try inspector.inspect(url: temporaryDirectory.url.appendingPathComponent("file.txt"))
+        }
+    }
+
+    @Test
+    func archiveInspectorReadsXCArchiveProducts() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let embeddedProfileURL = try TestFixtureFactory.writeProfile(
+            to: temporaryDirectory.url,
+            fileName: "archive-embedded",
+            name: "XCArchive Profile",
+            uuid: "XCARCHIVE-AAAA-BBBB",
+            teamName: "Archive Team",
+            teamIdentifier: "ARCH1234",
+            bundleIdentifier: "com.example.xcarchive"
+        )
+        let archiveURL = temporaryDirectory.url.appendingPathComponent("Sample.xcarchive", isDirectory: true)
+        let applicationsDirectory = archiveURL
+            .appendingPathComponent("Products", isDirectory: true)
+            .appendingPathComponent("Applications", isDirectory: true)
+        try FileManager.default.createDirectory(at: applicationsDirectory, withIntermediateDirectories: true)
+        _ = try TestFixtureFactory.writeApplicationBundle(
+            to: applicationsDirectory,
+            appName: "ArchivedApp",
+            displayName: "Archived App",
+            bundleIdentifier: "com.example.xcarchive",
+            embeddedProfileURL: embeddedProfileURL
+        )
+
+        let inspection = try ArchiveInspector(parser: MobileProvisionParser()).inspect(url: archiveURL)
+        #expect(inspection.sourceURL == archiveURL)
+        #expect(inspection.title == "Archived App")
+        #expect(inspection.parsedProfile?.record.displayName == "XCArchive Profile")
     }
 }

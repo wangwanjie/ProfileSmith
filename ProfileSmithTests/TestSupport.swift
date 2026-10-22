@@ -54,6 +54,13 @@ enum TestFixtureFactory {
         return profileURL
     }
 
+    /// 写入一个无法解析的“描述文件”（没有内嵌 plist），用于验证扫描容错。
+    static func writeCorruptProfile(to directoryURL: URL, fileName: String) throws -> URL {
+        let profileURL = directoryURL.appendingPathComponent(fileName).appendingPathExtension("mobileprovision")
+        try Data("this is not a provisioning profile".utf8).write(to: profileURL)
+        return profileURL
+    }
+
     static func writeApplicationBundle(
         to directoryURL: URL,
         appName: String,
@@ -165,7 +172,8 @@ enum TestFixtureFactory {
     ) -> [String: Any] {
         let isDevelopment = profileType == "development"
         let hasDevices = profileType == "development" || profileType == "adhoc"
-        let isEnterprise = profileType == "enterprise"
+        // Mac 的 Developer ID 描述文件与 iOS 企业描述文件一样，通过 ProvisionsAllDevices 标记、不绑定设备。
+        let isEnterprise = profileType == "enterprise" || profileType == "developerid"
 
         var plist: [String: Any] = [
             "Name": name,
@@ -178,8 +186,9 @@ enum TestFixtureFactory {
             "ExpirationDate": expirationDate,
             "Platform": [platform],
             "DeveloperCertificates": [],
+            // 与真实描述文件保持一致：Mac 使用 com.apple.application-identifier，iOS 使用 application-identifier。
             "Entitlements": [
-                "application-identifier": "\(teamIdentifier).\(bundleIdentifier)",
+                platform == "Mac" ? "com.apple.application-identifier" : "application-identifier": "\(teamIdentifier).\(bundleIdentifier)",
                 "get-task-allow": isDevelopment,
             ],
         ]

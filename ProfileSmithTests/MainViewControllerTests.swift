@@ -6,6 +6,12 @@ import Testing
 @Suite(.serialized)
 struct MainViewControllerTests {
     @MainActor
+    init() {
+        // 部分用例断言简体中文文案；默认语言已改为跟随系统，这里显式固定，避免结果依赖运行机器的语言设置。
+        AppLocalization.shared.setLanguage(.simplifiedChinese)
+    }
+
+    @MainActor
     @Test
     func mainViewControllerLoadsProfilesSearchesAndUpdatesDetails() throws {
         let temporaryDirectory = try TestTemporaryDirectory()

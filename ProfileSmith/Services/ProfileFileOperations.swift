@@ -19,6 +19,8 @@ final class ProfileFileOperations {
         var installedURLs: [URL] = []
         var skippedURLs: [URL] = []
         let installLocation = paths.primaryInstallLocation
+        // 新系统或未安装过 Xcode 的机器上安装目录可能不存在，导入前先确保目录存在。
+        try fileManager.createDirectory(at: installLocation.url, withIntermediateDirectories: true)
 
         for url in urls where ProfileScanner.isSupportedProfileFile(url: url) {
             let parsed = try parser.parseProfile(at: url, sourceLocation: installLocation)
@@ -61,6 +63,10 @@ final class ProfileFileOperations {
     }
 
     func exportProfile(from sourceURL: URL, to destinationURL: URL) throws {
+        // 导出目标就是源文件本身时直接返回，否则下面的“先删后拷”会把源文件删掉。
+        if sourceURL.standardizedFileURL.resolvingSymlinksInPath() == destinationURL.standardizedFileURL.resolvingSymlinksInPath() {
+            return
+        }
         if fileManager.fileExists(atPath: destinationURL.path) {
             try fileManager.removeItem(at: destinationURL)
         }
@@ -80,9 +86,13 @@ final class ProfileFileOperations {
         }
 
         let timestamp = Formatters.backupTimestampString(from: Date())
-        let backupURL = paths.renameBackupDirectory
-            .appendingPathComponent("\(desiredBaseName)-\(timestamp)", isDirectory: false)
-            .appendingPathExtension(record.fileExtension)
+        try fileManager.createDirectory(at: paths.renameBackupDirectory, withIntermediateDirectories: true)
+        // 同一秒内多次美化同名文件时备份文件名会冲突，这里同样取一个不存在的文件名。
+        let backupURL = uniqueFileURL(
+            for: paths.renameBackupDirectory
+                .appendingPathComponent("\(desiredBaseName)-\(timestamp)", isDirectory: false)
+                .appendingPathExtension(record.fileExtension)
+        )
         let preferredDestinationURL = currentURL.deletingLastPathComponent()
             .appendingPathComponent(desiredBaseName, isDirectory: false)
             .appendingPathExtension(record.fileExtension)
@@ -97,11 +107,18 @@ final class ProfileFileOperations {
         return destinationURL
     }
 
-    func exportCertificate(data: Data, summary: CertificateSummary, to directoryURL: URL) throws -> URL {
-        let fileName = sanitizeFileName(summary.summary).isEmpty ? "Certificate" : sanitizeFileName(summary.summary)
-        let outputURL = directoryURL.appendingPathComponent(fileName).appendingPathExtension("cer")
-        try data.write(to: outputURL, options: .atomic)
-        return outputURL
+    /// 导出证书：`.pem` 写 Base64 文本格式，其余（`.cer`/`.der`）写原始 DER 二进制，与系统钥匙串的约定保持一致。
+    func exportCertificate(data: Data, to destinationURL: URL) throws {
+        if destinationURL.pathExtension.lowercased() == "pem" {
+            try Self.pemString(for: data).write(to: destinationURL, atomically: true, encoding: .utf8)
+        } else {
+            try data.write(to: destinationURL, options: .atomic)
+        }
+    }
+
+    nonisolated static func pemString(for certificateData: Data) -> String {
+        let base64 = certificateData.base64EncodedString(options: [.lineLength64Characters, .endLineWithLineFeed])
+        return "-----BEGIN CERTIFICATE-----\n\(base64)\n-----END CERTIFICATE-----\n"
     }
 
     private func safeDestinationURL(preferredURL: URL, incomingURL: URL) throws -> URL {

@@ -1,6 +1,7 @@
 import Cocoa
 import Combine
 import SnapKit
+import UniformTypeIdentifiers
 
 final class MainViewController: NSViewController {
     private let context: AppContext
@@ -13,7 +14,9 @@ final class MainViewController: NSViewController {
     private var currentParsedProfile: ParsedProfile?
     private var currentInspection: PreviewInspection?
     private var currentInspectorRoot: InspectorNode?
-    private var previewWindowController: PreviewWindowController?
+    /// 同时打开的所有独立预览窗口。只保留最后一个会导致之前的窗口控制器被释放、窗口内容变空白。
+    private var previewWindowControllers: [PreviewWindowController] = []
+    private var previewWindowCloseObservers: [ObjectIdentifier: NSObjectProtocol] = [:]
     private var pendingRevealPaths: [String] = []
     private var hasExpandedQueryForPendingReveal = false
     private var activeTableSortDescriptor: NSSortDescriptor?
@@ -89,12 +92,15 @@ final class MainViewController: NSViewController {
     private lazy var profileContextMenu: NSMenu = {
         let menu = NSMenu()
         menu.delegate = self
+        // 菜单项的可用状态由 menuNeedsUpdate 按选中数量手动设置，关闭自动启用，否则 isEnabled 会被忽略。
+        menu.autoenablesItems = false
         return menu
     }()
 
     private lazy var detailContextMenu: NSMenu = {
         let menu = NSMenu()
         menu.delegate = self
+        menu.autoenablesItems = false
         return menu
     }()
 
@@ -144,9 +150,59 @@ final class MainViewController: NSViewController {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = true
-        panel.allowedFileTypes = ["mobileprovision", "provisionprofile", "ipa", "xcarchive", "appex", "app"]
+        panel.allowedContentTypes = Self.contentTypes(forExtensions: ["mobileprovision", "provisionprofile", "ipa", "xcarchive", "appex", "app"])
         guard panel.runModal() == .OK else { return }
         handleIncomingFiles(panel.urls)
+    }
+
+    /// 让用户确认后把所有已过期的描述文件移到废纸篓。
+    func presentExpiredProfileCleanup(_ sender: Any?) {
+        let expiredProfiles: [ProfileRecord]
+        do {
+            expiredProfiles = try context.repository.fetchExpiredProfiles()
+        } catch {
+            NSApp.presentError(error)
+            return
+        }
+
+        guard !expiredProfiles.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = L10n.mainCleanExpiredEmptyTitle
+            alert.informativeText = L10n.mainCleanExpiredEmptyBody
+            alert.runModal()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.mainCleanExpiredTitle(expiredProfiles.count)
+        alert.informativeText = makeDeletionPreviewText(for: expiredProfiles)
+        alert.addButton(withTitle: L10n.moveToTrash)
+        alert.addButton(withTitle: L10n.cancel)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            try context.fileOperations.deleteProfiles(
+                at: expiredProfiles.map { URL(fileURLWithPath: $0.path) },
+                permanently: false
+            )
+            selectedPaths = []
+            context.repository.refresh(forceReindex: false)
+            summaryTextView.string = L10n.mainCleanExpiredCompleted(expiredProfiles.count)
+        } catch {
+            NSApp.presentError(error)
+            // 部分文件可能已移走，刷新索引以反映真实状态。
+            context.repository.refresh(forceReindex: false)
+        }
+    }
+
+    private static func contentTypes(forExtensions extensions: [String]) -> [UTType] {
+        // .app / .appex / .xcarchive 是目录包：必须声明为 package 的子类型，打开面板才允许把它们当作单个文件选择。
+        let packageExtensions: Set<String> = ["app", "appex", "xcarchive"]
+        return extensions.compactMap { fileExtension in
+            let supertype: UTType = packageExtensions.contains(fileExtension) ? .package : .data
+            return UTType(filenameExtension: fileExtension, conformingTo: supertype)
+        }
     }
 
     private func buildUI() {
@@ -332,6 +388,9 @@ final class MainViewController: NSViewController {
         }
         tableView.copyHandler = { [weak self] in
             self?.copySelectedRowContents(nil)
+        }
+        tableView.deleteHandler = { [weak self] in
+            self?.moveSelectedProfilesToTrash(nil)
         }
         tableView.menu = profileContextMenu
 
@@ -976,7 +1035,7 @@ final class MainViewController: NSViewController {
         let placeholder = "-"
         let entitlements = parsedProfile.plist["Entitlements"] as? [String: Any] ?? [:]
         let entitlementsText = entitlements.keys.sorted().map { key in
-            "\(key): \(String(describing: entitlements[key] ?? ""))"
+            "\(key): \(Formatters.plistValueString(entitlements[key] ?? ""))"
         }.joined(separator: "\n")
         let certificateText = parsedProfile.certificates.map { certificate in
             var parts = ["\(certificate.summary)"]
@@ -1039,6 +1098,8 @@ final class MainViewController: NSViewController {
         let expiringSoonCount = snapshot.metrics.expiringSoonCount
         let refreshText = snapshot.lastRefreshDate.map { L10n.mainLastRefresh(Formatters.timestampString(from: $0)) } ?? L10n.mainNeverRefreshed
         let prefix = isRepositoryRefreshing ? L10n.mainLoadingPrefix : ""
+        let failedCount = context.repository.lastScanFailedPaths.count
+        let suffix = failedCount > 0 ? L10n.mainStatusScanFailed(failedCount) : ""
 
         if selectionCount > 0 {
             statusLabel.stringValue = prefix + L10n.mainStatusSummarySelected(
@@ -1048,7 +1109,7 @@ final class MainViewController: NSViewController {
                 expired: expiredCount,
                 expiringSoon: expiringSoonCount,
                 refresh: refreshText
-            )
+            ) + suffix
         } else {
             statusLabel.stringValue = prefix + L10n.mainStatusSummary(
                 current: currentResultCount,
@@ -1056,7 +1117,7 @@ final class MainViewController: NSViewController {
                 expired: expiredCount,
                 expiringSoon: expiringSoonCount,
                 refresh: refreshText
-            )
+            ) + suffix
         }
     }
 
@@ -1095,7 +1156,9 @@ final class MainViewController: NSViewController {
         else { return }
 
         if preferredSplitPosition == nil {
-            let currentWidth = tableContainer.frame.width
+            // 首次布局时 NSSplitView 尚未把 autosave 的位置恢复到子视图上，tableContainer 仍是构建时的默认宽度；
+            // 因此优先读取 autosave 记录，保证用户拖动过的分隔条位置在重启后保留。
+            let currentWidth = Self.savedLeadingPaneWidth(autosaveName: splitView.autosaveName) ?? tableContainer.frame.width
             // 保留有效恢复位置；旧版本保存的零宽度需要回退到默认比例。
             preferredSplitPosition = currentWidth >= minimumTablePaneWidth
                 ? currentWidth
@@ -1110,6 +1173,27 @@ final class MainViewController: NSViewController {
         isApplyingPreferredSplitPosition = true
         splitView.setPosition(clampedPosition, ofDividerAt: 0)
         isApplyingPreferredSplitPosition = false
+    }
+
+    /// 读取 NSSplitView autosave 记录的第一个子视图宽度。
+    /// 记录格式为字符串数组，每项形如 "x, y, width, height, isHidden, isCollapsed"。
+    static func savedLeadingPaneWidth(autosaveName: NSSplitView.AutosaveName?, defaults: UserDefaults = .standard) -> CGFloat? {
+        guard let autosaveName, !autosaveName.isEmpty,
+              let frames = defaults.array(forKey: "NSSplitView Subview Frames \(autosaveName)") as? [String],
+              let leadingFrame = frames.first
+        else {
+            return nil
+        }
+
+        let components = leadingFrame.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard components.count >= 3, let width = Double(components[2]), width > 0 else {
+            return nil
+        }
+        // 被折叠（isHidden 为 YES）的记录视为无效，交给默认比例处理。
+        if components.count >= 5, components[4].uppercased() == "YES" {
+            return nil
+        }
+        return CGFloat(width)
     }
 
     private func clampedSplitPosition(for proposedPosition: CGFloat) -> CGFloat {
@@ -1182,7 +1266,7 @@ final class MainViewController: NSViewController {
     private func optimisticRenamedRecord(from record: ProfileRecord, renamedURL: URL) -> ProfileRecord {
         var renamedRecord = record
         renamedRecord.path = renamedURL.path
-        renamedRecord.fileName = renamedURL.deletingPathExtension().lastPathComponent
+        renamedRecord.fileName = renamedURL.lastPathComponent
         return renamedRecord
     }
 
@@ -1455,17 +1539,48 @@ final class MainViewController: NSViewController {
             }
 
             if let previewURL = previewURLs.first {
-                let inspection = try context.repository.inspectArchive(at: previewURL)
-                showPreviewWindow(for: inspection)
+                inspectAndShowPreview(at: previewURL)
             }
         } catch {
             NSApp.presentError(error)
         }
     }
 
+    /// IPA 需要解压，放到后台队列解析，避免大文件卡住主线程。
+    private func inspectAndShowPreview(at url: URL) {
+        detailQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                let inspection = try self.context.repository.inspectArchive(at: url)
+                DispatchQueue.main.async {
+                    self.showPreviewWindow(for: inspection)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    NSApp.presentError(error)
+                }
+            }
+        }
+    }
+
     private func showPreviewWindow(for inspection: PreviewInspection) {
         let windowController = PreviewWindowController(inspection: inspection)
-        previewWindowController = windowController
+        previewWindowControllers.append(windowController)
+        if let window = windowController.window {
+            let key = ObjectIdentifier(windowController)
+            // 窗口关闭后释放对应控制器（及其持有的临时解压目录）。
+            previewWindowCloseObservers[key] = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification,
+                object: window,
+                queue: .main
+            ) { [weak self, weak windowController] _ in
+                guard let self else { return }
+                if let observer = self.previewWindowCloseObservers.removeValue(forKey: key) {
+                    NotificationCenter.default.removeObserver(observer)
+                }
+                self.previewWindowControllers.removeAll { $0 === windowController }
+            }
+        }
         windowController.showWindow(self)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -1499,12 +1614,7 @@ final class MainViewController: NSViewController {
     @objc private func previewSelectedItems(_ sender: Any?) {
         let records = selectedRecords()
         guard records.count == 1 else { return }
-        do {
-            let inspection = try context.repository.inspectArchive(at: URL(fileURLWithPath: records[0].path))
-            showPreviewWindow(for: inspection)
-        } catch {
-            NSApp.presentError(error)
-        }
+        inspectAndShowPreview(at: URL(fileURLWithPath: records[0].path))
     }
 
     @objc private func handleTableDoubleAction(_ sender: Any?) {
@@ -1528,7 +1638,7 @@ final class MainViewController: NSViewController {
 
         let savePanel = NSSavePanel()
         savePanel.nameFieldStringValue = sanitizeFileName(record.displayName)
-        savePanel.allowedFileTypes = [record.fileExtension]
+        savePanel.allowedContentTypes = Self.contentTypes(forExtensions: [record.fileExtension])
         savePanel.canCreateDirectories = true
 
         guard savePanel.runModal() == .OK, let destinationURL = savePanel.url else { return }
@@ -1569,9 +1679,7 @@ final class MainViewController: NSViewController {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = permanently ? L10n.mainDeletePermanentlyTitle : L10n.mainDeleteToTrashTitle
-        let previewNames = records.prefix(10).map(\.displayName).joined(separator: "\n")
-        let suffix = records.count > 10 ? "\n…" : ""
-        alert.informativeText = "\(previewNames)\(suffix)"
+        alert.informativeText = makeDeletionPreviewText(for: records)
         alert.addButton(withTitle: permanently ? L10n.delete : L10n.moveToTrash)
         alert.addButton(withTitle: L10n.cancel)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -1589,6 +1697,24 @@ final class MainViewController: NSViewController {
         let records = effectiveProfileContextSelection()
         guard !records.isEmpty else { return }
         copyTextToPasteboard(records.map(\.path).joined(separator: "\n"))
+    }
+
+    @objc private func copySelectedUUIDs(_ sender: Any?) {
+        let values = effectiveProfileContextSelection().compactMap(\.uuid)
+        guard !values.isEmpty else { return }
+        copyTextToPasteboard(values.joined(separator: "\n"))
+    }
+
+    @objc private func copySelectedBundleIdentifiers(_ sender: Any?) {
+        let values = effectiveProfileContextSelection().compactMap { $0.bundleIdentifier ?? $0.applicationIdentifier }
+        guard !values.isEmpty else { return }
+        copyTextToPasteboard(values.joined(separator: "\n"))
+    }
+
+    private func makeDeletionPreviewText(for records: [ProfileRecord]) -> String {
+        let previewNames = records.prefix(10).map(\.displayName).joined(separator: "\n")
+        let suffix = records.count > 10 ? "\n…" : ""
+        return "\(previewNames)\(suffix)"
     }
 
     @objc private func copySelectedRowContents(_ sender: Any?) {
@@ -1609,18 +1735,13 @@ final class MainViewController: NSViewController {
         let savePanel = NSSavePanel()
         let fileName = sanitizeFileName(node.certificateSummary?.summary ?? node.key)
         savePanel.nameFieldStringValue = fileName
-        savePanel.allowedFileTypes = ["cer", "pem"]
+        savePanel.allowedContentTypes = Self.contentTypes(forExtensions: ["cer", "pem"])
+        savePanel.allowsOtherFileTypes = true
         guard savePanel.runModal() == .OK, let destinationURL = savePanel.url else { return }
 
-        let base64 = data.base64EncodedString(options: [.lineLength64Characters, .endLineWithLineFeed])
-        let pem = """
-        -----BEGIN CERTIFICATE-----
-        \(base64)
-        -----END CERTIFICATE-----
-        """
-
         do {
-            try pem.write(to: destinationURL, atomically: true, encoding: .utf8)
+            // 之前无论选择哪种扩展名都写 PEM 文本，导致 .cer 无法被钥匙串直接导入；现在按扩展名区分格式。
+            try context.fileOperations.exportCertificate(data: data, to: destinationURL)
         } catch {
             NSApp.presentError(error)
         }
@@ -1864,6 +1985,16 @@ extension MainViewController: NSMenuDelegate {
             let copyRowItem = NSMenuItem(title: L10n.mainContextCopyRow, action: #selector(copySelectedRowContents(_:)), keyEquivalent: "")
             copyRowItem.target = self
             menu.addItem(copyRowItem)
+
+            let copyUUIDItem = NSMenuItem(title: L10n.mainContextCopyUUID, action: #selector(copySelectedUUIDs(_:)), keyEquivalent: "")
+            copyUUIDItem.target = self
+            copyUUIDItem.isEnabled = selection.contains { $0.uuid != nil }
+            menu.addItem(copyUUIDItem)
+
+            let copyBundleIDItem = NSMenuItem(title: L10n.mainContextCopyBundleID, action: #selector(copySelectedBundleIdentifiers(_:)), keyEquivalent: "")
+            copyBundleIDItem.target = self
+            copyBundleIDItem.isEnabled = selection.contains { ($0.bundleIdentifier ?? $0.applicationIdentifier) != nil }
+            menu.addItem(copyBundleIDItem)
 
             let exportItem = NSMenuItem(title: L10n.mainContextExportProfile, action: #selector(exportSelectedProfile(_:)), keyEquivalent: "")
             exportItem.target = self

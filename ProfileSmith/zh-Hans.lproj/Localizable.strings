@@ -222,3 +222,13 @@
 "preview.html.empty.entitlements" = "没有可显示的 Entitlements。";
 "preview.html.empty.info_plist" = "没有可显示的 Info.plist 数据。";
 "preview.html.empty.certificates" = "没有证书数据。";
+
+"display.profile_type.distribution_developer_id" = "分发（Developer ID）";
+"menu.clean_expired" = "清理过期描述文件…";
+"main.clean_expired.title" = "将 %d 个过期描述文件移到废纸篓？";
+"main.clean_expired.empty.title" = "没有过期的描述文件";
+"main.clean_expired.empty.body" = "当前已索引的描述文件都在有效期内。";
+"main.clean_expired.completed" = "已将 %d 个过期描述文件移到废纸篓。";
+"main.context.copy_uuid" = "复制 UUID";
+"main.context.copy_bundle_id" = "复制 Bundle ID";
+"main.status.scan_failed" = " %d 个文件解析失败，已跳过。";

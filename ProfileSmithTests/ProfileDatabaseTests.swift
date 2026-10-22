@@ -139,4 +139,86 @@ struct ProfileDatabaseTests {
         #expect(metrics.expiredCount == 1)
         #expect(metrics.expiringSoonCount == 1)
     }
+
+    @Test
+    func searchFallsBackToSubstringMatchingAndEscapesLikeWildcards() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let database = try ProfileDatabase(databaseURL: temporaryDirectory.url.appendingPathComponent("ProfileSmith.sqlite"))
+        defer { try? database.close() }
+
+        let expiration = Date().addingTimeInterval(90 * 86_400).timeIntervalSince1970
+        let smith = TestFixtureFactory.makeRecord(
+            path: "/tmp/smith.mobileprovision",
+            name: "ProfileSmith Dev",
+            teamName: "Smith Team",
+            bundleIdentifier: "com.example.profilesmith",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 90,
+            expirationDate: expiration
+        )
+        let other = TestFixtureFactory.makeRecord(
+            path: "/tmp/other.mobileprovision",
+            name: "Other App",
+            teamName: "Other Team",
+            bundleIdentifier: "com.example.other",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 90,
+            expirationDate: expiration
+        )
+        try database.save(records: [smith, other], removingPaths: [])
+
+        // FTS 只做词首前缀匹配，“Smith”命中不了“ProfileSmith”，必须回退到子串匹配。
+        let substringResults = try database.fetchProfiles(query: ProfileQuery(searchText: "fileSmi"))
+        #expect(substringResults.map(\.path) == [smith.path])
+
+        // 带 "." 的 Bundle ID 无法用 FTS 语法表达，同样走子串匹配。
+        let bundleResults = try database.fetchProfiles(query: ProfileQuery(searchText: "com.example.other"))
+        #expect(bundleResults.map(\.path) == [other.path])
+
+        // "%" 和 "_" 必须按字面量匹配，不能当作通配符把所有记录都搜出来。
+        #expect(try database.fetchProfiles(query: ProfileQuery(searchText: "%")).isEmpty)
+        #expect(try database.fetchProfiles(query: ProfileQuery(searchText: "_")).isEmpty)
+    }
+
+    @Test
+    func savingAgainReplacesSearchIndexAndRemovingDeletesRows() throws {
+        let temporaryDirectory = try TestTemporaryDirectory()
+        defer { temporaryDirectory.cleanup() }
+
+        let database = try ProfileDatabase(databaseURL: temporaryDirectory.url.appendingPathComponent("ProfileSmith.sqlite"))
+        defer { try? database.close() }
+
+        var record = TestFixtureFactory.makeRecord(
+            path: "/tmp/replace.mobileprovision",
+            name: "Before Rename",
+            teamName: "Replace Team",
+            bundleIdentifier: "com.example.replace",
+            profileType: "Development",
+            profilePlatform: "iOS",
+            isExpired: false,
+            daysUntilExpiration: 90,
+            expirationDate: Date().addingTimeInterval(90 * 86_400).timeIntervalSince1970
+        )
+        try database.save(records: [record], removingPaths: [])
+
+        record.name = "After Rename"
+        record.searchText = "After Rename"
+        try database.save(records: [record], removingPaths: [])
+
+        #expect(try database.fetchProfiles(query: ProfileQuery()).count == 1)
+        #expect(try database.fetchProfiles(query: ProfileQuery(searchText: "after")).map(\.displayName) == ["After Rename"])
+        #expect(try database.fetchProfiles(query: ProfileQuery(searchText: "before")).isEmpty)
+        #expect(try database.indexedFileStates().keys.sorted() == [record.path])
+
+        try database.save(records: [], removingPaths: [record.path])
+        #expect(try database.fetchProfiles(query: ProfileQuery()).isEmpty)
+        #expect(try database.fetchProfiles(query: ProfileQuery(searchText: "after")).isEmpty)
+        #expect(try database.fetchMetrics() == .empty)
+    }
 }

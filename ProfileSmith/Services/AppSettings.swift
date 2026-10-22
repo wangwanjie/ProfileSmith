@@ -23,7 +23,7 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     static let defaultUpdateCheckStrategy: UpdateCheckStrategy = .daily
-    static let defaultLanguage: AppLanguage = .simplifiedChinese
+    static var defaultLanguage: AppLanguage { AppLanguage.systemPreferred }
     static let defaultAppearance: AppAppearance = .system
 
     private enum Keys {
