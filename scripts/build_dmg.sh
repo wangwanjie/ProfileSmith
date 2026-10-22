@@ -337,18 +337,56 @@ Output:
 EOF
 }
 
-# 校验可执行文件只包含目标架构，防止误打出通用包或错误架构的包。
+# 列出 app 包内所有 Mach-O 文件（主程序、框架、XPC 服务、辅助程序等）。
+list_macho_files() {
+    local app_path="$1"
+    local file_path
+
+    while IFS= read -r -d '' file_path; do
+        if file "$file_path" | grep -q "Mach-O"; then
+            printf '%s\n' "$file_path"
+        fi
+    done < <(find "$app_path" -type f -print0)
+}
+
+# Sparkle 等通过 SPM 引入的预编译框架是通用二进制，ARCHS 构建设置对它们不生效，这里统一裁剪为目标架构。
+thin_bundle_to_arch() {
+    local app_path="$1"
+    local arch="$2"
+    local macho_path
+    local archs
+
+    while IFS= read -r macho_path; do
+        archs="$(lipo -archs "$macho_path")"
+        if [[ "$archs" == "$arch" ]]; then
+            continue
+        fi
+        if [[ " $archs " != *" $arch "* ]]; then
+            echo "error: $macho_path does not contain $arch (has: $archs)" >&2
+            exit 1
+        fi
+        lipo "$macho_path" -thin "$arch" -output "$macho_path.thin"
+        # 保留原文件权限（可执行位），否则辅助程序与 XPC 服务无法启动。
+        chmod "$(stat -f '%Lp' "$macho_path")" "$macho_path.thin"
+        mv "$macho_path.thin" "$macho_path"
+        echo "thinned ${macho_path#"$app_path"/} -> $arch"
+    done < <(list_macho_files "$app_path")
+}
+
+# 校验包内所有 Mach-O 都只包含目标架构，防止误打出通用包或错误架构的包。
 verify_binary_arch() {
     local app_path="$1"
     local expected_arch="$2"
-    local executable_path="$app_path/Contents/MacOS/$APP_NAME"
+    local macho_path
     local actual_archs
 
-    actual_archs="$(lipo -archs "$executable_path")"
-    if [[ "$actual_archs" != "$expected_arch" ]]; then
-        echo "error: $executable_path contains [$actual_archs], expected [$expected_arch]" >&2
-        exit 1
-    fi
+    while IFS= read -r macho_path; do
+        actual_archs="$(lipo -archs "$macho_path")"
+        if [[ "$actual_archs" != "$expected_arch" ]]; then
+            echo "error: $macho_path contains [$actual_archs], expected [$expected_arch]" >&2
+            exit 1
+        fi
+    done < <(list_macho_files "$app_path")
 }
 
 notarize_dmg() {
@@ -393,6 +431,7 @@ build_dmg_for_arch() {
         echo "error: app bundle not found: $app_path" >&2
         exit 1
     fi
+    thin_bundle_to_arch "$app_path" "$arch"
     verify_binary_arch "$app_path" "$arch"
 
     echo "re-signing $arch app with $SIGNING_IDENTITY"
