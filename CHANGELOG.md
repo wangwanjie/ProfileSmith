@@ -6,7 +6,7 @@
 
 ### 分发方式调整
 
-- 改为按芯片分别提供安装包：Apple 芯片（M 系列）下载 `ProfileSmith_V_1.5.0_arm64.dmg`，Intel 芯片下载 `ProfileSmith_V_1.5.0_x86_64.dmg`，体积约为原通用包的一半。
+- 改为按芯片分别提供安装包：Apple 芯片（M 系列）下载 `ProfileSmith_V_1.5.0_arm64.dmg`，Intel 芯片下载 `ProfileSmith_V_1.5.0_x86_64.dmg`，安装包体积比原来的通用包缩小约三分之一。
 - 应用内自动更新会按当前 Mac 的芯片选择对应的安装包；旧版通用包用户升级后会自动切换为匹配的版本。
 
 ### 新功能

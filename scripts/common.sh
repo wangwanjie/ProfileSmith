@@ -181,11 +181,13 @@ ensure_sparkle_tool() {
     mkdir -p "$PROJECT_DIR/build"
 
     echo "building Sparkle tool: $tool_name" >&2
+    # Sparkle 工程默认部署目标为 10.13，新版 Xcode 已不支持，这些工具只在本机运行，统一提升到 12.0。
     xcodebuild \
         -project "$SPARKLE_PROJECT" \
         -scheme "$tool_name" \
         -configuration Release \
         -derivedDataPath "$SPARKLE_DERIVED_DATA" \
+        MACOSX_DEPLOYMENT_TARGET=12.0 \
         CODE_SIGNING_ALLOWED=NO \
         build >&2
 
