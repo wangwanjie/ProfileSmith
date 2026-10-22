@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 
+# 为新版本生成 Sparkle appcast 条目，并合并进仓库根目录的 appcast.xml。
+#
+# 分架构分发后，同一版本会有 arm64 与 x86_64 两个 DMG：
+# - arm64 条目带 <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>，Intel 机器会跳过它；
+# - Sparkle 在版本号相同的候选里选择 appcast 中靠前的条目，因此 arm64 条目排在 x86_64 之前，
+#   Apple 芯片机器（包括旧版通用包用户）会升级到原生 arm64 版本，Intel 机器则落到 x86_64 版本。
+# 旧版本条目原样保留，不依赖本地是否还留着历史 DMG。
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-DEFAULT_ARCHIVES_DIR="$PROJECT_DIR/build/appcast-archives"
 DEFAULT_OUTPUT_PATH="$PROJECT_DIR/appcast.xml"
 
-ARCHIVE_PATH=""
-ARCHIVES_DIR="$DEFAULT_ARCHIVES_DIR"
+ARCHIVE_PATHS=()
 OUTPUT_PATH="$DEFAULT_OUTPUT_PATH"
 REPO=""
 ACCOUNT="$DEFAULT_SPARKLE_ACCOUNT"
@@ -19,32 +25,18 @@ NOTES_FILE=""
 usage() {
     cat <<EOF
 Usage:
-  ./scripts/generate_appcast.sh [--archive PATH] [--archives-dir DIR] [--output PATH]
+  ./scripts/generate_appcast.sh --archive PATH [--archive PATH ...] [--output PATH]
                                 [--repo OWNER/REPO] [--account ACCOUNT]
                                 [--notes TEXT | --notes-file FILE]
+
+  --archive 可重复传入同一版本不同架构的 DMG（${APP_NAME}_V_<版本>_<arm64|x86_64>.dmg）。
 EOF
-}
-
-copy_release_notes() {
-    local archive_dest="$1"
-    local base_path="${archive_dest%.*}"
-
-    if [[ -n "$NOTES_FILE" ]]; then
-        local extension="${NOTES_FILE##*.}"
-        cp "$NOTES_FILE" "${base_path}.${extension}"
-    elif [[ -n "$NOTES" ]]; then
-        printf '%s\n' "$NOTES" > "${base_path}.md"
-    fi
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --archive)
-            ARCHIVE_PATH="${2:-}"
-            shift 2
-            ;;
-        --archives-dir)
-            ARCHIVES_DIR="${2:-}"
+            ARCHIVE_PATHS+=("${2:-}")
             shift 2
             ;;
         --output)
@@ -84,19 +76,26 @@ if [[ -n "$NOTES" && -n "$NOTES_FILE" ]]; then
     exit 1
 fi
 
+if [[ ${#ARCHIVE_PATHS[@]} -eq 0 ]]; then
+    echo "error: at least one --archive is required" >&2
+    usage >&2
+    exit 1
+fi
+
 require_command /usr/bin/python3
 require_command /usr/libexec/PlistBuddy
 
-ARCHIVES_DIR="$(expand_path "$ARCHIVES_DIR")"
 OUTPUT_PATH="$(expand_path "$OUTPUT_PATH")"
 
-if [[ -n "$ARCHIVE_PATH" ]]; then
-    ARCHIVE_PATH="$(resolve_existing_path "$ARCHIVE_PATH")"
-    if [[ -z "$ARCHIVE_PATH" || ! -f "$ARCHIVE_PATH" ]]; then
-        echo "error: archive not found" >&2
+RESOLVED_ARCHIVES=()
+for archive_path in "${ARCHIVE_PATHS[@]}"; do
+    resolved="$(resolve_existing_path "$archive_path")"
+    if [[ -z "$resolved" || ! -f "$resolved" ]]; then
+        echo "error: archive not found: $archive_path" >&2
         exit 1
     fi
-fi
+    RESOLVED_ARCHIVES+=("$resolved")
+done
 
 if [[ -n "$NOTES_FILE" ]]; then
     NOTES_FILE="$(resolve_existing_path "$NOTES_FILE")"
@@ -124,132 +123,41 @@ if ! "$GENERATE_KEYS_TOOL" --account "$ACCOUNT" -p >/dev/null 2>&1; then
     exit 1
 fi
 
-mkdir -p "$ARCHIVES_DIR" "$(dirname "$OUTPUT_PATH")"
-
-if [[ -n "$ARCHIVE_PATH" ]]; then
-    archive_dest="$ARCHIVES_DIR/$(basename "$ARCHIVE_PATH")"
-    cp "$ARCHIVE_PATH" "$archive_dest"
-    copy_release_notes "$archive_dest"
-fi
-
-shopt -s nullglob
-archives=( "$ARCHIVES_DIR"/*.dmg )
-shopt -u nullglob
-
-if [[ ${#archives[@]} -eq 0 ]]; then
-    echo "error: no DMGs found in $ARCHIVES_DIR" >&2
-    exit 1
-fi
-
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/profilesmith-appcast.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-cp "$ARCHIVES_DIR"/*.dmg "$TMP_DIR/"
-for notes_path in "$ARCHIVES_DIR"/*.md "$ARCHIVES_DIR"/*.txt "$ARCHIVES_DIR"/*.html; do
-    [[ -e "$notes_path" ]] || continue
-    cp "$notes_path" "$TMP_DIR/"
-done
-
-TMP_APPCAST="$TMP_DIR/appcast.xml"
 TMP_PRIVATE_KEY="$TMP_DIR/private_ed25519.key"
 "$GENERATE_KEYS_TOOL" --account "$ACCOUNT" -x "$TMP_PRIVATE_KEY"
-"$GENERATE_APPCAST_TOOL" \
-    --account "$ACCOUNT" \
-    --ed-key-file "$TMP_PRIVATE_KEY" \
-    --embed-release-notes \
-    --link "https://github.com/$REPO" \
-    -o "$TMP_APPCAST" \
-    "$TMP_DIR"
 
-/usr/bin/python3 - "$TMP_APPCAST" "$OUTPUT_PATH" "$REPO" <<'PY'
-import pathlib
-import re
-import sys
-import urllib.parse
-import xml.etree.ElementTree as ET
+# 每个 DMG 单独放进一个目录生成条目：同版本号的多个归档放在一起时 generate_appcast 只会保留一个。
+GENERATED_APPCASTS=()
+index=0
+for archive_path in "${RESOLVED_ARCHIVES[@]}"; do
+    work_dir="$TMP_DIR/archive-$index"
+    mkdir -p "$work_dir"
+    cp "$archive_path" "$work_dir/"
 
-input_path, output_path, repo = sys.argv[1:4]
-sparkle_ns = "http://www.andymatuschak.org/xml-namespaces/sparkle"
-dc_ns = "http://purl.org/dc/elements/1.1/"
-ET.register_namespace("sparkle", sparkle_ns)
-ET.register_namespace("dc", dc_ns)
+    base_name="$(basename "${archive_path%.*}")"
+    if [[ -n "$NOTES_FILE" ]]; then
+        cp "$NOTES_FILE" "$work_dir/${base_name}.${NOTES_FILE##*.}"
+    elif [[ -n "$NOTES" ]]; then
+        printf '%s\n' "$NOTES" > "$work_dir/${base_name}.md"
+    fi
 
-tree = ET.parse(input_path)
-root = tree.getroot()
-channel = root.find("channel")
-if channel is None:
-    raise SystemExit("missing channel node")
+    "$GENERATE_APPCAST_TOOL" \
+        --account "$ACCOUNT" \
+        --ed-key-file "$TMP_PRIVATE_KEY" \
+        --embed-release-notes \
+        --link "https://github.com/$REPO" \
+        -o "$work_dir/appcast.xml" \
+        "$work_dir"
 
+    GENERATED_APPCASTS+=("$work_dir/appcast.xml")
+    index=$((index + 1))
+done
 
-def find_or_create(parent, tag):
-    node = parent.find(tag)
-    if node is None:
-        node = ET.SubElement(parent, tag)
-    return node
+mkdir -p "$(dirname "$OUTPUT_PATH")"
 
-
-title_node = find_or_create(channel, "title")
-if not (title_node.text or "").strip():
-    title_node.text = "ProfileSmith Updates"
-
-link_node = find_or_create(channel, "link")
-link_node.text = f"https://github.com/{repo}"
-
-description_node = find_or_create(channel, "description")
-if not (description_node.text or "").strip():
-    description_node.text = "ProfileSmith release feed."
-
-language_node = find_or_create(channel, "language")
-if not (language_node.text or "").strip():
-    language_node.text = "zh-CN"
-
-for item in channel.findall("item"):
-    enclosure = item.find("enclosure")
-    if enclosure is None:
-        continue
-
-    raw_url = enclosure.attrib.get("url", "")
-    parsed_path = urllib.parse.urlparse(raw_url).path
-    filename = pathlib.PurePosixPath(parsed_path).name or pathlib.Path(raw_url).name
-    if not filename:
-        continue
-
-    match = re.match(r"ProfileSmith_V_(.+)\.dmg$", filename)
-    version = match.group(1) if match else None
-
-    if version is None:
-        short_version = item.find(f"{{{sparkle_ns}}}shortVersionString")
-        version = (short_version.text or "").strip() if short_version is not None else ""
-
-    if not version:
-        sparkle_version = item.find(f"{{{sparkle_ns}}}version")
-        version = (sparkle_version.text or "").strip() if sparkle_version is not None else ""
-
-    if not version:
-        raise SystemExit(f"failed to infer version for {filename}")
-
-    version = version.lstrip("vV")
-    tag = f"v{version}"
-    quoted_tag = urllib.parse.quote(tag, safe="")
-    quoted_file = urllib.parse.quote(filename, safe="")
-    release_url = f"https://github.com/{repo}/releases/tag/{quoted_tag}"
-    download_url = f"https://github.com/{repo}/releases/download/{quoted_tag}/{quoted_file}"
-
-    enclosure.set("url", download_url)
-
-    item_link = find_or_create(item, "link")
-    item_link.text = release_url
-
-    release_notes_link = item.find(f"{{{sparkle_ns}}}releaseNotesLink")
-    if release_notes_link is not None:
-        item.remove(release_notes_link)
-
-    full_release_notes_link = item.find(f"{{{sparkle_ns}}}fullReleaseNotesLink")
-    if full_release_notes_link is not None:
-        item.remove(full_release_notes_link)
-
-ET.indent(tree, space="    ")
-tree.write(output_path, encoding="utf-8", xml_declaration=True)
-PY
+/usr/bin/python3 "$SCRIPT_DIR/merge_appcast.py" "$OUTPUT_PATH" "$REPO" "$APP_NAME" "${GENERATED_APPCASTS[@]}"
 
 echo "appcast written to $OUTPUT_PATH"

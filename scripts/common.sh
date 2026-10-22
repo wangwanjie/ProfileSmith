@@ -15,6 +15,57 @@ DEFAULT_REPO="wangwanjie/ProfileSmith"
 DEFAULT_SPARKLE_ACCOUNT="cn.vanjay.ProfileSmith.sparkle"
 DEFAULT_NOTARY_PROFILE="vanjay_mac_stapler"
 
+# 分发支持的 CPU 架构：Apple 芯片（arm64）与 Intel（x86_64）分别打包，减小下载体积。
+SUPPORTED_ARCHS=(arm64 x86_64)
+
+is_supported_arch() {
+    local candidate="$1"
+    local arch
+    for arch in "${SUPPORTED_ARCHS[@]}"; do
+        if [[ "$arch" == "$candidate" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# DMG 命名约定：ProfileSmith_V_<版本>_<架构>.dmg
+dmg_file_name() {
+    local version="$1"
+    local arch="$2"
+    printf '%s_V_%s_%s.dmg\n' "$APP_NAME" "$version" "$arch"
+}
+
+# 从 DMG 文件名解析出架构；旧版通用包（无架构后缀）输出 universal。
+arch_from_dmg_name() {
+    local dmg_name
+    dmg_name="$(basename "$1")"
+
+    if [[ "$dmg_name" =~ ^${APP_NAME}_V_.+_(arm64|x86_64)\.dmg$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    else
+        printf 'universal\n'
+    fi
+}
+
+# 从 DMG 文件名解析出版本号，兼容带架构后缀与不带后缀两种命名。
+version_from_dmg_name() {
+    local dmg_name
+    dmg_name="$(basename "$1")"
+
+    if [[ "$dmg_name" =~ ^${APP_NAME}_V_(.+)_(arm64|x86_64)\.dmg$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    if [[ "$dmg_name" =~ ^${APP_NAME}_V_(.+)\.dmg$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    return 1
+}
+
 main_build_xcodebuild_args() {
     if [[ -d "$MAIN_WORKSPACE" ]]; then
         printf '%s\n' "-workspace" "$MAIN_WORKSPACE" "-scheme" "$SCHEME"

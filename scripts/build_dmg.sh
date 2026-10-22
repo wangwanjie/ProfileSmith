@@ -7,7 +7,6 @@ source "$SCRIPT_DIR/common.sh"
 
 CONFIGURATION="Release"
 BUILD_DIR="$PROJECT_DIR/build"
-DERIVED_DATA="$BUILD_DIR/DerivedData"
 DMG_OUTPUT_DIR="$BUILD_DIR/dmg"
 KEYCHAIN_PROFILE="$DEFAULT_NOTARY_PROFILE"
 DO_NOTARIZE=true
@@ -323,17 +322,115 @@ EOF
 usage() {
     cat <<EOF
 Usage:
-  ./scripts/build_dmg.sh [--keychain-profile PROFILE] [--signing-identity IDENTITY] [--no-notarize]
+  ./scripts/build_dmg.sh [--arch arm64|x86_64|all] [--keychain-profile PROFILE]
+                         [--signing-identity IDENTITY] [--no-notarize]
 
 Options:
+  --arch ARCH                  要打包的架构，可重复指定；默认 all（arm64 与 x86_64 各出一个 DMG）
   --keychain-profile PROFILE   Notarytool keychain profile. Default: $DEFAULT_NOTARY_PROFILE
   --signing-identity IDENTITY  Developer ID Application identity to use
   --no-notarize                Skip notarization
+
+Output:
+  build/dmg/${APP_NAME}_V_<version>_arm64.dmg
+  build/dmg/${APP_NAME}_V_<version>_x86_64.dmg
 EOF
 }
 
+# 校验可执行文件只包含目标架构，防止误打出通用包或错误架构的包。
+verify_binary_arch() {
+    local app_path="$1"
+    local expected_arch="$2"
+    local executable_path="$app_path/Contents/MacOS/$APP_NAME"
+    local actual_archs
+
+    actual_archs="$(lipo -archs "$executable_path")"
+    if [[ "$actual_archs" != "$expected_arch" ]]; then
+        echo "error: $executable_path contains [$actual_archs], expected [$expected_arch]" >&2
+        exit 1
+    fi
+}
+
+notarize_dmg() {
+    local dmg_path="$1"
+    local notary_output
+
+    echo "submitting $(basename "$dmg_path") for notarization"
+    notary_output="$(xcrun notarytool submit "$dmg_path" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)" || true
+    echo "$notary_output"
+
+    if ! grep -q "status: Accepted" <<<"$notary_output"; then
+        echo "error: notarization failed for $dmg_path" >&2
+        exit 1
+    fi
+
+    xcrun stapler staple "$dmg_path"
+    xcrun stapler validate "$dmg_path"
+}
+
+build_dmg_for_arch() {
+    local arch="$1"
+    # 每个架构使用独立的 DerivedData，避免两次构建互相清理产物。
+    local derived_data="$BUILD_DIR/DerivedData-$arch"
+    local app_path="$derived_data/Build/Products/$CONFIGURATION/${APP_NAME}.app"
+    local dmg_path
+    local volume_name="${APP_NAME} V$VERSION $arch"
+
+    dmg_path="$DMG_OUTPUT_DIR/$(dmg_file_name "$VERSION" "$arch")"
+
+    echo "building $APP_NAME $VERSION ($arch)"
+    xcodebuild \
+        "${MAIN_BUILD_ARGS[@]}" \
+        -configuration "$CONFIGURATION" \
+        -derivedDataPath "$derived_data" \
+        -destination "generic/platform=macOS" \
+        ARCHS="$arch" \
+        ONLY_ACTIVE_ARCH=NO \
+        clean \
+        build
+
+    if [[ ! -d "$app_path" ]]; then
+        echo "error: app bundle not found: $app_path" >&2
+        exit 1
+    fi
+    verify_binary_arch "$app_path" "$arch"
+
+    echo "re-signing $arch app with $SIGNING_IDENTITY"
+    resign_for_distribution "$app_path" "$SIGNING_IDENTITY"
+    verify_developer_id_signature "$app_path" "$APP_NAME.app ($arch)"
+    codesign --verify --deep --strict --verbose=2 "$app_path"
+
+    rm -f "$dmg_path"
+    echo "creating DMG: $dmg_path"
+    create_pretty_dmg "$app_path" "$dmg_path" "$volume_name"
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$dmg_path"
+    codesign --verify --strict --verbose=2 "$dmg_path"
+
+    if [[ "$DO_NOTARIZE" == true ]]; then
+        notarize_dmg "$dmg_path"
+    else
+        echo "skipping notarization for $arch"
+    fi
+
+    BUILT_DMGS+=("$dmg_path")
+}
+
+REQUESTED_ARCHS=()
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --arch)
+            if [[ "${2:-}" == "all" ]]; then
+                REQUESTED_ARCHS+=("${SUPPORTED_ARCHS[@]}")
+            elif is_supported_arch "${2:-}"; then
+                REQUESTED_ARCHS+=("$2")
+            else
+                echo "error: unsupported arch: ${2:-}" >&2
+                usage >&2
+                exit 1
+            fi
+            shift 2
+            ;;
         --keychain-profile)
             KEYCHAIN_PROFILE="${2:-}"
             shift 2
@@ -358,11 +455,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ ${#REQUESTED_ARCHS[@]} -eq 0 ]]; then
+    REQUESTED_ARCHS=("${SUPPORTED_ARCHS[@]}")
+fi
+
 require_command xcodebuild
 require_command codesign
 require_command hdiutil
 require_command osascript
 require_command xcrun
+require_command lipo
 
 VERSION="$(read_marketing_version)"
 if [[ -z "$VERSION" ]]; then
@@ -379,10 +481,6 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
     exit 1
 fi
 
-DMG_NAME="${APP_NAME}_V_${VERSION}.dmg"
-APP_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION/${APP_NAME}.app"
-DMG_PATH="$DMG_OUTPUT_DIR/$DMG_NAME"
-VOLUME_NAME="${APP_NAME} V$VERSION"
 MAIN_BUILD_ARGS=()
 while IFS= read -r arg; do
     MAIN_BUILD_ARGS+=("$arg")
@@ -390,47 +488,16 @@ done < <(main_build_xcodebuild_args)
 
 mkdir -p "$DMG_OUTPUT_DIR"
 
-echo "building $APP_NAME $VERSION"
-xcodebuild \
-    "${MAIN_BUILD_ARGS[@]}" \
-    -configuration "$CONFIGURATION" \
-    -derivedDataPath "$DERIVED_DATA" \
-    -destination "generic/platform=macOS" \
-    ARCHS="arm64 x86_64" \
-    ONLY_ACTIVE_ARCH=NO \
-    clean \
-    build
-
-if [[ ! -d "$APP_PATH" ]]; then
-    echo "error: app bundle not found: $APP_PATH" >&2
-    exit 1
-fi
-
-echo "re-signing app with $SIGNING_IDENTITY"
-resign_for_distribution "$APP_PATH" "$SIGNING_IDENTITY"
-verify_developer_id_signature "$APP_PATH" "$APP_NAME.app"
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
-rm -f "$DMG_PATH"
-echo "creating DMG: $DMG_PATH"
-create_pretty_dmg "$APP_PATH" "$DMG_PATH" "$VOLUME_NAME"
-codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG_PATH"
-codesign --verify --strict --verbose=2 "$DMG_PATH"
-
-if [[ "$DO_NOTARIZE" == true ]]; then
-    echo "submitting DMG for notarization"
-    NOTARY_OUTPUT="$(xcrun notarytool submit "$DMG_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wait 2>&1)" || true
-    echo "$NOTARY_OUTPUT"
-
-    if ! grep -q "status: Accepted" <<<"$NOTARY_OUTPUT"; then
-        echo "error: notarization failed" >&2
-        exit 1
+BUILT_DMGS=()
+# 去重后依次构建，避免重复传入同一架构。
+SEEN_ARCHS=" "
+for arch in "${REQUESTED_ARCHS[@]}"; do
+    if [[ "$SEEN_ARCHS" == *" $arch "* ]]; then
+        continue
     fi
+    SEEN_ARCHS+="$arch "
+    build_dmg_for_arch "$arch"
+done
 
-    xcrun stapler staple "$DMG_PATH"
-    xcrun stapler validate "$DMG_PATH"
-else
-    echo "skipping notarization"
-fi
-
-echo "done: $DMG_PATH"
+echo "done:"
+printf '  %s\n' "${BUILT_DMGS[@]}"
