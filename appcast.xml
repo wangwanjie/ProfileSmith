@@ -3,6 +3,73 @@
     <channel>
         <title>ProfileSmith</title>
         <item>
+            <title>1.5.1</title>
+            <pubDate>Thu, 19 Nov 2026 00:33:18 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.5.1</link>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"># ProfileSmith 1.5.1
+
+## 问题修复
+
+- 修复证书的“过期时间”始终不显示的问题：现在读取证书真实的有效期，并在概要页标出已过期的证书；详情页证书节点新增生效时间与过期时间，字段顺序固定。
+- 修复搜索很短的关键字时几乎所有描述文件都被搜出来的问题（此前证书二进制数据也参与了搜索）。
+- 搜索支持多个关键字（以空格分隔，需同时包含），结果与关键字位置无关；带重音等非 ASCII 字母也能忽略大小写。
+- 修复在未选中的行上右键时，“移到废纸篓”“彻底删除”“复制”等操作作用到了原有选中项的问题；现在与 Finder 一致，只作用于右键点击的那一行。
+- 修复预览 macOS 的 `.app` / `.appex` 时读不到 Info.plist 和内嵌描述文件的问题。
+- 修复多选时“预览”按钮可点击但没有反应的问题。
+- 修复修改搜索或筛选条件时，状态栏的“上次刷新时间”偶尔变回“尚未刷新”的问题。
+- 修复“美化文件名”在描述文件名称以 `.` 开头时生成隐藏文件、随后从列表中消失的问题。
+
+## 改进
+
+- 导入描述文件时，若本机装有 Xcode 16 及以上版本，安装到 `~/Library/Developer/Xcode/UserData/Provisioning Profiles`，新版 Xcode 可以直接使用；否则仍安装到 `~/Library/MobileDevice/Provisioning Profiles`。
+- 一次导入多个描述文件时，个别文件损坏不再中断整次导入，其余文件照常导入，并列出失败的文件及原因。
+- 批量删除或清理过期描述文件时，个别文件删除失败不再中断后续文件，结束后统一列出失败项。
+- 一次拖入多个 IPA / App / XCArchive 时，为每个文件分别打开预览窗口。
+- 目录监听触发自动刷新时，如果当前查看的描述文件没有变化，详情区不再重新加载，滚动位置和展开状态得以保留。
+- 预览窗口切换标签页时保留大纲视图的展开 / 折叠状态。
+
+升级后首次启动会自动重建索引。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.5.1/ProfileSmith_V_1.5.1_arm64.dmg" length="4311052" type="application/octet-stream" sparkle:edSignature="uTpSIibk9QdN/dHXs2Xw4/ZgDBz+RhvSDwhl3zxe4bxMPtiWC5+EK4lZd/ieEL4Kni1s3iku5th56KYOVfWCBw==" />
+        </item>
+        <item>
+            <title>1.5.1</title>
+            <pubDate>Thu, 19 Nov 2026 00:33:19 +0800</pubDate>
+            <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.5.1</link>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"># ProfileSmith 1.5.1
+
+## 问题修复
+
+- 修复证书的“过期时间”始终不显示的问题：现在读取证书真实的有效期，并在概要页标出已过期的证书；详情页证书节点新增生效时间与过期时间，字段顺序固定。
+- 修复搜索很短的关键字时几乎所有描述文件都被搜出来的问题（此前证书二进制数据也参与了搜索）。
+- 搜索支持多个关键字（以空格分隔，需同时包含），结果与关键字位置无关；带重音等非 ASCII 字母也能忽略大小写。
+- 修复在未选中的行上右键时，“移到废纸篓”“彻底删除”“复制”等操作作用到了原有选中项的问题；现在与 Finder 一致，只作用于右键点击的那一行。
+- 修复预览 macOS 的 `.app` / `.appex` 时读不到 Info.plist 和内嵌描述文件的问题。
+- 修复多选时“预览”按钮可点击但没有反应的问题。
+- 修复修改搜索或筛选条件时，状态栏的“上次刷新时间”偶尔变回“尚未刷新”的问题。
+- 修复“美化文件名”在描述文件名称以 `.` 开头时生成隐藏文件、随后从列表中消失的问题。
+
+## 改进
+
+- 导入描述文件时，若本机装有 Xcode 16 及以上版本，安装到 `~/Library/Developer/Xcode/UserData/Provisioning Profiles`，新版 Xcode 可以直接使用；否则仍安装到 `~/Library/MobileDevice/Provisioning Profiles`。
+- 一次导入多个描述文件时，个别文件损坏不再中断整次导入，其余文件照常导入，并列出失败的文件及原因。
+- 批量删除或清理过期描述文件时，个别文件删除失败不再中断后续文件，结束后统一列出失败项。
+- 一次拖入多个 IPA / App / XCArchive 时，为每个文件分别打开预览窗口。
+- 目录监听触发自动刷新时，如果当前查看的描述文件没有变化，详情区不再重新加载，滚动位置和展开状态得以保留。
+- 预览窗口切换标签页时保留大纲视图的展开 / 折叠状态。
+
+升级后首次启动会自动重建索引。
+</description>
+            <enclosure url="https://github.com/wangwanjie/ProfileSmith/releases/download/v1.5.1/ProfileSmith_V_1.5.1_x86_64.dmg" length="4431899" type="application/octet-stream" sparkle:edSignature="XnLBuKMn4NwUkD264LQDcqBe3nKXYQ7qu38C/fbg3jAfOTBZrXHTQUD4d/1mAsUDmq0GshH6VJgRfH8iBeGGAg==" />
+        </item>
+        <item>
             <title>1.5.0</title>
             <pubDate>Thu, 22 Oct 2026 11:33:59 +0800</pubDate>
             <link>https://github.com/wangwanjie/ProfileSmith/releases/tag/v1.5.0</link>
